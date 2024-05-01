@@ -50,7 +50,7 @@ S = hs.fit_transform(time_values, input_signal)
 hs.plot(S)
 ```
 ![alt text](./img/power_quality_disturbance.png)
-![alt text](./img/power_quality_trajectory.png)
+![alt text](./img/power_quality_disturbance_trajectory.png)
 ![alt text](./img/fault_current.png)
 ![alt text](./img/fault_trajectory.png)
 
