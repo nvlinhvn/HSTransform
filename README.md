@@ -34,7 +34,6 @@ or
 ## 5. Example
 
 Here’s an example of how to use HS Transform to analyze a signal with voltage disturbance and power system fault:
-
 ```
 from hstransform import HyperbolicSTransform as HSTransform
 
@@ -50,7 +49,6 @@ S = hs.fit_transform(time_values, input_signal)
 
 hs.plot(S)
 ```
-
 ![alt text](./img/power_quality_disturbance.png)
 ![alt text](./img/power_quality_disturbance_trajectory.png)
 ![alt text](./img/fault_current.png)

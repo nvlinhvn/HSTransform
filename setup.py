@@ -13,7 +13,8 @@ setup(
         'numpy',
         'scipy',
         'pandas',
-        'matplotlib'
+        'matplotlib',
+        'pytest'
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
