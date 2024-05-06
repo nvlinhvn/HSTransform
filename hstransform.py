@@ -1,7 +1,8 @@
-import numpy as np
-from scipy.fft import fft, ifft
 import dataclasses
 from typing import Union
+
+import numpy as np
+from scipy.fft import fft, ifft
 import pandas as pd
 
 
@@ -14,8 +15,6 @@ class HSTransform:
 
     Attributes
     ----------
-    L : int
-        length of the signal
     forwardtaper : float
         forward taper value
     backwardtaper : float
@@ -52,13 +51,13 @@ class HSTransform:
         if not np.issubdtype(input_array.dtype, np.number):
             raise ValueError("input_signal should only contain numerical values.")
 
-    def _compute_hyperbolic_gaussian(self, L: int, n: int, time: np.ndarray) -> np.ndarray:
+    def _compute_hyperbolic_gaussian(self, l: int, n: int, time: np.ndarray) -> np.ndarray:
         """
         Computes the hyperbolic Gaussian window.
 
         Parameters
         ----------
-            L : int
+            l : int
                 length of the signal
             n : int
                 frequency point
@@ -67,19 +66,19 @@ class HSTransform:
 
         Returns
         -------
-            G : np.ndarray
+            g : np.ndarray
                 hyperbolic Gaussian window
         """
-        vectorf = np.arange(0, L)
+        vectorf = np.arange(0, l)
         vectorf1 = vectorf**2
         lambdaf = self.forwardtaper
         lambdab = self.backwardtaper
         lambda_val = self.curvature
-        X = (lambdaf + lambdab) * time / (2 * lambdaf * lambdab) + (lambdaf - lambdab) * np.sqrt(time**2 + lambda_val) / (2 * lambdaf * lambdab)
-        X = np.tile(X, (1, 2)).T
-        vectorf2 = -vectorf1 * X**2 / (2 * n**2)
-        G = 2 * np.abs(vectorf) * np.exp(vectorf2) / ((lambdaf + lambdab) * np.sqrt(2 * np.pi))
-        return np.sum(G)
+        x = (lambdaf + lambdab) * time / (2 * lambdaf * lambdab) + (lambdaf - lambdab) * np.sqrt(time**2 + lambda_val) / (2 * lambdaf * lambdab)
+        x = np.tile(x, (1, 2)).T
+        vectorf2 = -vectorf1 * x**2 / (2 * n**2)
+        g = 2 * np.abs(vectorf) * np.exp(vectorf2) / ((lambdaf + lambdab) * np.sqrt(2 * np.pi))
+        return np.sum(g)
 
     def fit_transform(self,
                       time_values: Union[pd.Series, np.ndarray, list],
