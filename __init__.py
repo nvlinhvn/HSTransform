@@ -1,1 +1,1 @@
-from .hstransform import HyperbolicSTransform
+from .hstransform import HSTransform
