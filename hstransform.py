@@ -114,23 +114,21 @@ class HSTransform:
         if not isinstance(input_signal, np.ndarray):
             input_signal = np.array(input_signal)
 
-        N = len(input_signal)
+        n = len(input_signal)
         # Make sure the max frequency to be optimized (Cover the 6th, 12th, or 18th harmonic respectively)
-        maxf = min(900, N // 2)
+        maxf = min(900, n // 2)
 
         # Compute the fft of input
-        H = fft(input_signal)
-        H = np.concatenate((H, H))
+        h = fft(input_signal)
+        h = np.concatenate((h, h))
 
         # S output
-        S = np.zeros(((maxf - minf + 1) // fsamplingrate, N), dtype='complex')
-        S[0, :] = np.mean(input_signal) * (1 & np.arange(1, N + 1))
-
-        k_values = np.arange(fsamplingrate, maxf - minf + 1, fsamplingrate)
+        s = np.zeros(((maxf - minf + 1) // fsamplingrate, n), dtype='complex')
+        s[0, :] = np.mean(input_signal) * (1 & np.arange(1, n + 1))
 
         # Increment the frequency point
         for k in range(fsamplingrate, maxf - minf + 1, fsamplingrate):
-            W_hy = self._compute_hyperbolic_gaussian(N, minf + k, time_values)
-            S[k // fsamplingrate, :] = ifft(H[minf + k + 1:minf + k + N+1] * W_hy)
+            w_hy = self._compute_hyperbolic_gaussian(n, minf + k, time_values)
+            s[k // fsamplingrate, :] = ifft(h[minf + k + 1:minf + k + n+1] * w_hy)
 
-        return S
+        return s
