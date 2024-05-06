@@ -21,6 +21,7 @@ jobs:
         pip install numpy
         pip install pandas
         pip install scipy
+        pip install pytest
     - name: Analysing the code with pylint
       run: |
         pylint $(git ls-files '*.py')
