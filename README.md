@@ -24,7 +24,7 @@ You can install HS Transform using pip:
 pip install HSTransform
 ```
 
-## 3. How to Install
+## 4. Run tests
 
 After installation, you can test the package using the included test scripts:
 `pytest tests/test_hstransform.py`
