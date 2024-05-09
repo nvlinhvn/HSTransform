@@ -68,3 +68,4 @@ or contact email: linhvietnguyen.ee@gmail.com
 ## 7. Citation
 
 If you use HS Transform in your research, please cite it as follows:
+Linh V Nguyen (2024). HS Transform (Version 0.1) [Computer software]. GitHub: github.com/nvlinhvn/hstransform

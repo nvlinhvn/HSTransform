@@ -1,0 +1,9 @@
+README.md
+setup.py
+HSTransform.egg-info/PKG-INFO
+HSTransform.egg-info/SOURCES.txt
+HSTransform.egg-info/dependency_links.txt
+HSTransform.egg-info/requires.txt
+HSTransform.egg-info/top_level.txt
+tests/__init__.py
+tests/test_hstransform.py
