@@ -1,3 +1,11 @@
+"""
+This is the setup module for the HSTransform package. (Beta test)
+
+S-transform with Hyperbolic Window
+Combines the best properties of the Short-time Fourier Transform 
+and the Wavelet Transform.
+"""
+
 from setuptools import setup, find_packages
 
 setup(
