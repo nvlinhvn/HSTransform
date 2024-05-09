@@ -34,21 +34,29 @@ or
 ## 5. Example
 
 Here’s an example of how to use HS Transform to analyze a signal with voltage disturbance and power system fault:
+
 ```
 from hstransform import HyperbolicSTransform as HSTransform
+
+# Create input signal (for example: Voltage signal)
+t = np.linspace(0, 10, 100) # timeseries
+V_m = 220*np.sqrt(2)  # peak voltage
+f_V = 50  # frequency
+phi_V = 0  # phase
+
+V_clean = V_m * np.sin(2 * np.pi * f_V * t + phi_V)
+# Create voltage sag/dip (80% of the nominal voltage for 0.15 second)
+V_sag = np.where((t >= 2) & (t <= 3.5), 0.5 * V_clean, V_clean)
 
 # Create an instance of HSTransform
 
 hs = HSTransform()
 
 # Perform the transform
-
-S = hs.fit_transform(time_values, input_signal)
-
-# Plot the result
-
-hs.plot(S)
+signal = V_sag
+S_transformed = st.fit_transform(t, signal)
 ```
+
 ![alt text](./img/power_quality_disturbance.png)
 ![alt text](./img/power_quality_disturbance_trajectory.png)
 ![alt text](./img/fault_current.png)
