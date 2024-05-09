@@ -26,3 +26,5 @@ jobs:
       run: |
         pylint $(git ls-files 'setup.py')
         pylint --disable=E1101,W0212 $(git ls-files 'tests/test_hstransform.py')
+        pylint --disable=E1101 $(git ls-files 'tests/__init__.py')
+        pylint --disable=E1101 $(git ls-files 'hstransform.py')
