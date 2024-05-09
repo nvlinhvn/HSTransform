@@ -27,9 +27,7 @@ pip install HSTransform
 ## 4. Run tests
 
 After installation, you can test the package using the included test scripts:
-`pytest tests/test_hstransform.py`
-or
-`python -m unittest tests/test_hstransform.py`
+`pytest tests/`
 
 ## 5. Example
 
@@ -65,7 +63,7 @@ S_transformed = st.fit_transform(t, signal)
 ## 6. Communication
 
 If you have any questions, issues, or suggestions for HS Transform, please open an issue on the GitHub repository.
-or contact email:
+or contact email: linhvietnguyen.ee@gmail.com
 
 ## 7. Citation
 
