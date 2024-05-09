@@ -1,3 +1,9 @@
+"""
+Unit Test for HS functions
+- Test Gaussian Windowed
+- Test HS-transform output
+"""
+
 import numpy as np
 import pytest
 from HSTransform.hstransform import HSTransform
@@ -14,7 +20,7 @@ def test_hyperbolic_gaussian():
     st = HSTransform()
 
     # Test the _compute_hyperbolic_gaussian method
-    result = st._compute_hyperbolic_gaussian(1000, 50, t)
+    result = st.compute_hyperbolic_gaussian(1000, 50, t)
     assert isinstance(result, np.float64)
 
 def test_fit_transform():
