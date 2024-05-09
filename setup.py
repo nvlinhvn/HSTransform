@@ -1,8 +1,9 @@
 """
 This is the setup module for the HSTransform package. (Beta test)
 
-The HSTransform package provides a Python implementation of the Hyperbolic S-transform, 
-a time-frequency representation that combines the best properties of the Short-time Fourier Transform and the Wavelet Transform.
+S-transform with Hyperbolic Window
+Combines the best properties of the Short-time Fourier Transform 
+and the Wavelet Transform.
 """
 
 from setuptools import setup, find_packages
