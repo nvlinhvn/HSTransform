@@ -5,7 +5,6 @@ from HSTransform.hstransform import HSTransform
 def test_hyperbolic_gaussian():
     # Create a sinusoidal signal
     t = np.linspace(0, 1, 100)
-    signal = np.sin(2 * np.pi * 50 * t)
 
     # Compute the S-transform
     st = HSTransform()
@@ -21,16 +20,16 @@ def test_fit_transform():
 
     # Compute the S-transform
     st = HSTransform()
-    S_transformed = st.fit_transform(t, signal)
+    s_transformed = st.fit_transform(t, signal)
 
     # Add some assertions here to test the S-transform output
     # Dimension
-    assert S_transformed.shape == (min(900, len(signal) // 2)+1, len(signal))
+    assert s_transformed.shape == (min(900, len(signal) // 2)+1, len(signal))
     # Type of output
-    assert isinstance(S_transformed, np.ndarray)
-    assert np.issubdtype(S_transformed.dtype, np.complexfloating)
+    assert isinstance(s_transformed, np.ndarray)
+    assert np.issubdtype(s_transformed.dtype, np.complexfloating)
     # any null
-    assert not np.isnan(S_transformed).any()
+    assert not np.isnan(s_transformed).any()
 
 if __name__ == "__main__":
     pytest.main()
