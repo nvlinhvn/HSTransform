@@ -3,6 +3,10 @@ import pytest
 from HSTransform.hstransform import HSTransform
 
 def test_hyperbolic_gaussian():
+    """
+    Tests aims to validate the output 
+    of Gaussian Window of a time array
+    """
     # Create a sinusoidal signal
     t = np.linspace(0, 1, 100)
 
@@ -14,6 +18,12 @@ def test_hyperbolic_gaussian():
     assert isinstance(result, np.float64)
 
 def test_fit_transform():
+    """
+    Tests aims to validate the S-transform output 
+    - shape
+    - type 
+    - check any null
+    """
     # Create a sinusoidal signal
     t = np.linspace(0, 2, 100)
     signal = np.sin(2 * np.pi * 50 * t)
