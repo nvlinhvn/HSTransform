@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: HSTransform
-Version: 0.1.1
+Version: 0.2.1
 Summary: A Package to Compute S-transform with Hyperbolic Window
 Author: Linh V Nguyen
 Author-email: linhvietnguyen.ee@gmail.com

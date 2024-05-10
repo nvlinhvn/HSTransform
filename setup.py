@@ -13,7 +13,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='HSTransform',
-    version='0.1.1',
+    version='0.2.1',
     packages=find_packages(),
     license='MIT',
     author='Linh V Nguyen',
@@ -23,11 +23,11 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
-        'numpy',
-        'scipy',
-        'pandas',
-        'matplotlib',
-        'pytest'
+        'numpy>=1.21.2',
+        'scipy>=1.7.1',
+        'pandas>=1.3.3',
+        'matplotlib>=3.4.3',
+        'pytest>=6.2.5'
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
