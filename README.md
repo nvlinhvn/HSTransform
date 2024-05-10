@@ -81,7 +81,7 @@ As can be seen, both Wavelet and S-transform are able to detect when the fault o
 
 ![](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_trajectory.png)
 
-We can also observeo different types of faults can generate different real-imaginary trajectory in S-transform at varying levels of frequencies.
+We can also observe different types of faults can generate different real-imaginary trajectory in S-transform at varying levels of frequencies.
 
 ## 6. Communication
 
