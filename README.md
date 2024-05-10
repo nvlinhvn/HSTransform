@@ -42,7 +42,6 @@ After installation, you can test the package using the included test scripts:
 
 Here’s an example of how to use HS Transform to analyze a signal with voltage disturbance and power system fault:
 
-<pre>
 ```python
 from hstransform import HSTransform
 
@@ -64,7 +63,6 @@ hs = HSTransform()
 signal = V_sag
 S_transformed = hs.fit_transform(t, signal)
 ```
-</pre>
 
 ### 5.1 Power Quality Disturbance
 
