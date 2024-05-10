@@ -6,7 +6,7 @@ Package for Hyperbolic S-transform
 
 HS Transform is a Python package for performing Hyperbolic [S-transform](https://en.wikipedia.org/wiki/S_transform) [[1]](#1). The S-transform is a time-frequency representation that combines the best properties of the Short-time Fourier Transform and the Wavelet Transform. It provides simultaneous information on both the frequency content and temporal localization of a signal.
 
-This is a part of my [published paper](https://ieeexplore.ieee.org/document/8423487)
+This is a work of my [published paper](https://ieeexplore.ieee.org/document/8423487)
 
 ### References
 
@@ -43,7 +43,8 @@ After installation, you can test the package using the included test scripts:
 Here’s an example of how to use HS Transform to analyze a signal with voltage disturbance and power system fault:
 
 <pre>
-from hstransform import HyperbolicSTransform as HSTransform
+```python
+from hstransform import HSTransform
 
 # Create input signal (for example: Voltage signal)
 t = np.linspace(0, 10, 100) # timeseries
@@ -62,6 +63,7 @@ hs = HSTransform()
 # Perform the transform
 signal = V_sag
 S_transformed = hs.fit_transform(t, signal)
+```
 </pre>
 
 ### 5.1 Power Quality Disturbance
@@ -81,7 +83,7 @@ As can be seen, both Wavelet and S-transform are able to detect when the fault o
 
 ![](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_trajectory.png)
 
-We can also observeo different types of faults can generate different real-imaginary trajectory in S-transform at varying level of frequencies.
+We can also observeo different types of faults can generate different real-imaginary trajectory in S-transform at varying levels of frequencies.
 
 ## 6. Communication
 
