@@ -13,7 +13,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='HSTransform',
-    version='0.2.1',
+    version='0.1.5',
+    url='https://github.com/nvlinhvn/HSTransform',
     packages=find_packages(),
     license='MIT',
     author='Linh V Nguyen',
