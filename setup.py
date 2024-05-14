@@ -27,7 +27,6 @@ setup(
         'numpy>=1.21.2',
         'scipy>=1.7.1',
         'pandas>=1.3.3',
-        'matplotlib>=3.4.3',
         'pytest>=6.2.5'
     ],
     classifiers=[
