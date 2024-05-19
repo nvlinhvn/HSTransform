@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: HSTransform
-Version: 0.1.6
+Version: 0.1.1
 Summary: A Package to Compute S-transform with Hyperbolic Window
 Home-page: https://github.com/nvlinhvn/HSTransform
 Author: Linh V Nguyen
@@ -41,10 +41,16 @@ HS Transform requires the following Python packages:
 
 ## 3. How to Install
 
-You can install HS Transform using pip:
+After that, you can install HS Transform using pip:
 
 ```
 pip install HSTransform
+```
+
+You can also install all dependencies and package in 1 statement
+
+```
+pip install numpy scipy pandas matplotlib pytest HSTransform
 ```
 
 ## 4. Run tests
@@ -56,7 +62,18 @@ After installation, you can test the package using the included test scripts:
 
 Here’s an example of how to use HS Transform to analyze a signal with voltage disturbance and power system fault:
 
+It's noted sometimes you need to include the installed HSTransform package location into sys
+
 ```python
+import sys
+import os
+
+# Add the package directory to sys.path
+package_path = os.path.abspath('/usr/local/Caskroom/miniconda/base/envs/YOUR_ENVIRONMENT/lib/python3.10/site-packages/')
+if package_path not in sys.path:
+    sys.path.insert(0, package_path)
+
+import numpy as np
 from hstransform import HSTransform
 
 # Create input signal (for example: Voltage signal)
@@ -80,6 +97,7 @@ S_transformed = hs.fit_transform(t, signal)
 
 ### 5.1 Power Quality Disturbance
 
+Compare HS-transform vs. Morlet Wavelet Transform:
 ![Voltage Disturbance](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance.png)
 
 The figure showed HS-transform is able to detect the transient disturbances like notch, spike. Meanwhile, those signals from Morlet Wavelet transform are not obviously recognized.

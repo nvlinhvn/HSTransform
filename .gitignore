@@ -8,3 +8,4 @@ __pycache__/__init__.cpython-39.pyc
 .ipynb_checkpoints/__init__-checkpoint.py
 tests/.ipynb_checkpoints/test_hstransform-checkpoint.py
 .DS_Store
+.ipynb_checkpoints/setup-checkpoint.py
