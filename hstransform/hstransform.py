@@ -130,4 +130,4 @@ class HSTransform:
             w_hy = self._compute_hyperbolic_gaussian(n, minf + k, time_values)
             s[k // fsamplingrate, :] = ifft(h[minf + k + 1:minf + k + n+1] * w_hy)
 
-        return s 
+        return s
