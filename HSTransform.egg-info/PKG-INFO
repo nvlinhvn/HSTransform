@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: HSTransform
-Version: 0.1.5
+Version: 0.1.6
 Summary: A Package to Compute S-transform with Hyperbolic Window
 Home-page: https://github.com/nvlinhvn/HSTransform
 Author: Linh V Nguyen
@@ -11,10 +11,6 @@ Classifier: License :: OSI Approved :: MIT License
 Classifier: Programming Language :: Python :: 3.10
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
-Requires-Dist: numpy>=1.21.2
-Requires-Dist: scipy>=1.7.1
-Requires-Dist: pandas>=1.3.3
-Requires-Dist: pytest>=6.2.5
 
 # Hyperbolic S-Transform
 

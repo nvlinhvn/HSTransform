@@ -5,7 +5,7 @@ Unit Test for HS functions
 """
 import numpy as np
 import pytest
-from HSTransform.hstransform import HSTransform
+from hstransform import HSTransform
 
 def test_hyperbolic_gaussian():
     """

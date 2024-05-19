@@ -131,5 +131,3 @@ class HSTransform:
             s[k // fsamplingrate, :] = ifft(h[minf + k + 1:minf + k + n+1] * w_hy)
 
         return s
-    
-        
