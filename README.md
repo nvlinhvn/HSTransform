@@ -59,6 +59,7 @@ package_path = os.path.abspath('/usr/local/Caskroom/miniconda/base/envs/YOUR_ENV
 if package_path not in sys.path:
     sys.path.insert(0, package_path)
 
+import numpy as np
 from hstransform import HSTransform
 
 # Create input signal (for example: Voltage signal)
@@ -82,6 +83,7 @@ S_transformed = hs.fit_transform(t, signal)
 
 ### 5.1 Power Quality Disturbance
 
+Compare HS-transform vs. Morlet Wavelet Transform:
 ![Voltage Disturbance](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance.png)
 
 The figure showed HS-transform is able to detect the transient disturbances like notch, spike. Meanwhile, those signals from Morlet Wavelet transform are not obviously recognized.
