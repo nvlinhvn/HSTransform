@@ -66,20 +66,24 @@ S_transformed = hs.fit_transform(t, signal)
 
 ### 5.1 Power Quality Disturbance
 
-![](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance.png)
+![Voltage Disturbance](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance.png)
 
 The figure showed HS-transform is able to detect the transient disturbances like notch, spike. Meanwhile, those signals from Morlet Wavelet transform are not obviously recognized.
 
-![](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance_trajectory.png)
+######
+
+![Real-Imag Trajectory](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance_trajectory.png)
 We can see also different types of voltage disturbance can generate different real-imaginary trajectory in S-transform at different frequencies.
 
 ### 5.2 Power System Faults
 
-![](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_current.png)
+![Different Faults](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_current.png)
 
 As can be seen, both Wavelet and S-transform are able to detect when the fault occur (huge change in current magnitude). Wavelet transform seems more sensitive with noise with high distortion compared with HS-transform.
 
-![](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_trajectory.png)
+######
+
+![Real-Imag Trajectory](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_trajectory.png)
 
 We can also observe different types of faults can generate different real-imaginary trajectory in S-transform at varying levels of frequencies.
 

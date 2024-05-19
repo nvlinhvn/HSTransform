@@ -5,5 +5,7 @@ HSTransform.egg-info/SOURCES.txt
 HSTransform.egg-info/dependency_links.txt
 HSTransform.egg-info/requires.txt
 HSTransform.egg-info/top_level.txt
+hstransform/__init__.py
+hstransform/hstransform.py
 tests/__init__.py
 tests/test_hstransform.py
