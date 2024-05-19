@@ -27,10 +27,16 @@ HS Transform requires the following Python packages:
 
 ## 3. How to Install
 
-You can install HS Transform using pip:
+After that, you can install HS Transform using pip:
 
 ```
 pip install HSTransform
+```
+
+You can also install all dependencies and package in 1 statement
+
+```
+pip install numpy scipy pandas matplotlib pytest HSTransform
 ```
 
 ## 4. Run tests
@@ -42,7 +48,17 @@ After installation, you can test the package using the included test scripts:
 
 Here’s an example of how to use HS Transform to analyze a signal with voltage disturbance and power system fault:
 
+It's noted sometimes you need to include the installed HSTransform package location into sys
+
 ```python
+import sys
+import os
+
+# Add the package directory to sys.path
+package_path = os.path.abspath('/usr/local/Caskroom/miniconda/base/envs/YOUR_ENVIRONMENT/lib/python3.10/site-packages/')
+if package_path not in sys.path:
+    sys.path.insert(0, package_path)
+
 from hstransform import HSTransform
 
 # Create input signal (for example: Voltage signal)
