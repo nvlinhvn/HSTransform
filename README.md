@@ -1,6 +1,6 @@
 # Hyperbolic S-Transform
 
-Package for Hyperbolic S-transform
+Package for Hyperbolic S-transform. Link to [Pypi Project](https://pypi.org/project/HSTransform/)
 
 ## 1. Introduction
 
