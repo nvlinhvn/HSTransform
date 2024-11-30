@@ -2,6 +2,8 @@
 
 Package for Hyperbolic S-transform. Link to [Pypi Project](https://pypi.org/project/HSTransform/)
 
+![PyPI Downloads](https://static.pepy.tech/badge/hstransform)
+
 ## 1. Introduction
 
 HS Transform is a Python package for performing Hyperbolic [S-transform](https://en.wikipedia.org/wiki/S_transform) [[1]](#1). The S-transform is a time-frequency representation that combines the best properties of the Short-time Fourier Transform and the Wavelet Transform. It provides simultaneous information on both the frequency content and temporal localization of a signal.
