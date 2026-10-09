@@ -1,30 +1,70 @@
-"""
-Unit Test for HS functions
-- Test Gaussian Windowed
-- Test HS-transform output
-"""
+"""Tests for HSTransform: validation, window, and fit_transform behaviour."""
+
 import numpy as np
 import pytest
+
 from hstransform import HSTransform
 
 
-def test_hyperbolic_gaussian():
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def st() -> HSTransform:
+    return HSTransform()
+
+
+@pytest.fixture()
+def simple_signal() -> tuple[np.ndarray, np.ndarray]:
+    t = np.linspace(0, 2, 100)
+    signal = np.sin(2 * np.pi * 50 * t)
+    return t, signal
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+def test_input_validation_wrong_type(st: HSTransform) -> None:
+    with pytest.raises(TypeError):
+        st._input_validation({"a": 1})
+
+
+def test_input_validation_nan(st: HSTransform) -> None:
+    with pytest.raises(ValueError, match="null"):
+        st._input_validation([1.0, float("nan"), 3.0])
+
+
+def test_input_validation_string_array(st: HSTransform) -> None:
+    with pytest.raises(ValueError, match="numerical"):
+        st._input_validation(np.array(["a", "b", "c"]))
+
+
+def test_input_validation_valid_list(st: HSTransform) -> None:
+    st._input_validation([1.0, 2.0, 3.0])  # must not raise
+
+
+def test_input_validation_valid_ndarray(st: HSTransform) -> None:
+    st._input_validation(np.array([1.0, 2.0, 3.0]))  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _compute_hyperbolic_gaussian
+# ---------------------------------------------------------------------------
+
+def test_hyperbolic_gaussian(st: HSTransform) -> None:
     l, n = 1000, 50
     t = np.linspace(0, 1, 100)
-    st = HSTransform()
     result = st._compute_hyperbolic_gaussian(l, n, t)
-    # Returns a 1D array of length l (one weight per frequency sample), not a scalar
     assert isinstance(result, np.ndarray)
     assert result.shape == (l,)
 
 
-# --- Regression test for Bug 1: _compute_hyperbolic_gaussian must return a 1D array, not a scalar ---
-
-def test_hyperbolic_gaussian_returns_array():
-    """w_hy must be a 1D ndarray of length n so it shapes the spectrum per time step."""
+def test_hyperbolic_gaussian_returns_array(st: HSTransform) -> None:
+    """Regression for Bug 1: result must be a 1D ndarray, not a scalar."""
     n = 100
     t = np.linspace(0, 1, n)
-    st = HSTransform()
     result = st._compute_hyperbolic_gaussian(n, 50, t)
     assert isinstance(result, np.ndarray), (
         f"Expected np.ndarray but got {type(result)}. "
@@ -33,11 +73,87 @@ def test_hyperbolic_gaussian_returns_array():
     assert result.shape == (n,), f"Expected shape ({n},) but got {result.shape}"
 
 
-def test_fit_transform_dc_row_constant():
-    """
-    Regression for Bug 2: the DC row (frequency=0) must equal the signal mean
-    at every time step. In MATLAB 1 & [1:N] is logical AND → all ones.
-    In Python 1 & array is bitwise AND → alternating [1,0,1,0,...].
+def test_hyperbolic_gaussian_non_negative(st: HSTransform) -> None:
+    t = np.linspace(0, 1, 50)
+    result = st._compute_hyperbolic_gaussian(50, 10, t)
+    assert (result >= 0).all()
+
+
+@pytest.mark.parametrize("forwardtaper,backwardtaper,curvature", [
+    (0.1, 0.05, 100.0),
+    (0.3, 0.2, 500.0),
+    (0.5, 0.5, 312.5),
+])
+def test_hyperbolic_gaussian_custom_params(
+    forwardtaper: float, backwardtaper: float, curvature: float
+) -> None:
+    st = HSTransform(forwardtaper=forwardtaper, backwardtaper=backwardtaper, curvature=curvature)
+    t = np.linspace(0, 1, 64)
+    result = st._compute_hyperbolic_gaussian(64, 10, t)
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (64,)
+    assert not np.isnan(result).any()
+
+
+# ---------------------------------------------------------------------------
+# fit_transform — shape, dtype, correctness
+# ---------------------------------------------------------------------------
+
+def test_fit_transform_basic(st: HSTransform, simple_signal: tuple) -> None:
+    t, signal = simple_signal
+    s = st.fit_transform(t, signal)
+    assert isinstance(s, np.ndarray)
+    assert np.issubdtype(s.dtype, np.complexfloating)
+    assert not np.isnan(s).any()
+
+
+@pytest.mark.parametrize("n_samples", [64, 100, 256])
+def test_fit_transform_shape(n_samples: int) -> None:
+    t = np.linspace(0, 1, n_samples)
+    signal = np.sin(2 * np.pi * 10 * t)
+    st = HSTransform()
+    s = st.fit_transform(t, signal)
+    maxf = min(900, n_samples // 2)
+    expected_rows = (maxf - 0) // 1 + 1
+    assert s.shape == (expected_rows, n_samples)
+
+
+@pytest.mark.parametrize("fsamplingrate", [1, 2, 5])
+def test_fit_transform_shape_fsamplingrate(fsamplingrate: int) -> None:
+    n = 200
+    t = np.linspace(0, 1, n)
+    signal = np.sin(2 * np.pi * 20 * t)
+    st = HSTransform()
+    s = st.fit_transform(t, signal, fsamplingrate=fsamplingrate)
+    maxf = min(900, n // 2)
+    expected_rows = (maxf - 0) // fsamplingrate + 1
+    assert s.shape == (expected_rows, n)
+
+
+def test_fit_transform_list_input(st: HSTransform) -> None:
+    t = list(np.linspace(0, 1, 50))
+    signal = list(np.sin(2 * np.pi * 10 * np.linspace(0, 1, 50)))
+    s = st.fit_transform(t, signal)
+    assert isinstance(s, np.ndarray)
+    assert not np.isnan(s).any()
+
+
+def test_fit_transform_deterministic(st: HSTransform, simple_signal: tuple) -> None:
+    t, signal = simple_signal
+    s1 = st.fit_transform(t, signal)
+    s2 = st.fit_transform(t, signal)
+    np.testing.assert_array_equal(s1, s2)
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for confirmed MATLAB→Python porting bugs
+# ---------------------------------------------------------------------------
+
+def test_fit_transform_dc_row_constant() -> None:
+    """Regression for Bug 2: DC row must equal signal mean at every time step.
+
+    In MATLAB, 1 & [1:N] is logical AND → all ones.
+    In Python, 1 & array is bitwise AND → alternating [1,0,1,0,...].
     """
     t = np.linspace(0, 2, 200)
     signal = np.sin(2 * np.pi * 50 * t) + 0.5  # non-zero mean
@@ -51,24 +167,14 @@ def test_fit_transform_dc_row_constant():
     )
 
 
-def test_fit_transform():
-    t = np.linspace(0, 2, 100)
-    signal = np.sin(2 * np.pi * 50 * t)
-    st = HSTransform()
-    s_transformed = st.fit_transform(t, signal)
-    assert s_transformed.shape == (min(900, len(signal) // 2) + 1, len(signal))
-    assert isinstance(s_transformed, np.ndarray)
-    assert np.issubdtype(s_transformed.dtype, np.complexfloating)
-    assert not np.isnan(s_transformed).any()
+def test_fit_transform_two_tone_frequency_separation() -> None:
+    """Regression for Bug 1: window must localise energy at signal frequencies.
 
-
-def test_fit_transform_two_tone_frequency_separation():
+    With the correct vector window, a 50 Hz + 150 Hz signal should show
+    clearly higher energy at rows 50 and 150 than at row 10.
+    The old scalar window caused k²-growth artifacts with near-zero energy
+    at low-frequency rows.
     """
-    Regression for Bug 1: with the window correctly applied as a vector,
-    a two-tone signal (50 Hz + 150 Hz) must show localised energy at those
-    frequency rows, not a k²-growth artifact across all rows.
-    """
-    fs = 1000
     n = 1000
     t = np.linspace(0, 1, n, endpoint=False)
     signal = np.sin(2 * np.pi * 50 * t) + np.sin(2 * np.pi * 150 * t)
@@ -76,18 +182,14 @@ def test_fit_transform_two_tone_frequency_separation():
     s = st.fit_transform(t, signal, fsamplingrate=1)
 
     energy = np.abs(s) ** 2
-    mean_energy_at_50 = energy[50, :].mean()
-    mean_energy_at_150 = energy[150, :].mean()
-    mean_energy_at_10 = energy[10, :].mean()
+    mean_at_50 = energy[50, :].mean()
+    mean_at_150 = energy[150, :].mean()
+    mean_at_10 = energy[10, :].mean()
 
-    assert mean_energy_at_50 > mean_energy_at_10 * 5, (
+    assert mean_at_50 > mean_at_10 * 5, (
         "50 Hz row should have significantly more energy than row 10. "
         "If this fails, the Gaussian window is still acting as a scalar (Bug 1)."
     )
-    assert mean_energy_at_150 > mean_energy_at_10 * 5, (
+    assert mean_at_150 > mean_at_10 * 5, (
         "150 Hz row should have significantly more energy than row 10."
     )
-
-
-if __name__ == "__main__":
-    pytest.main()

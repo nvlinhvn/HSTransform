@@ -37,11 +37,11 @@ class HSTransform:
                 f"got {type(input_signal)}."
             )
 
-        if np.isnan(input_array).any():
-            raise ValueError("input_signal contains null values.")
-
         if not np.issubdtype(input_array.dtype, np.number):
             raise ValueError("input_signal should only contain numerical values.")
+
+        if np.isnan(input_array).any():
+            raise ValueError("input_signal contains null values.")
 
     def _compute_hyperbolic_gaussian(self, l: int, n: int, time: np.ndarray) -> np.ndarray:
         """Compute the hyperbolic Gaussian window.
@@ -99,7 +99,9 @@ class HSTransform:
         h = fft(input_signal)
         h = np.concatenate((h, h))
 
-        s = np.zeros(((maxf - minf + 1) // fsamplingrate, n), dtype="complex")
+        # Number of rows = DC row (0) + one row per frequency step up to maxf
+        n_rows = (maxf - minf) // fsamplingrate + 1
+        s = np.zeros((n_rows, n), dtype="complex")
         # MATLAB: 1 & [1:N] is logical AND → all ones. Python: 1 & array is bitwise AND → [1,0,1,0,...].
         s[0, :] = np.mean(input_signal) * np.ones(n)
 
