@@ -121,7 +121,7 @@ S = hs.fit_transform(t, V_sag)   # shape: (n_freq, n_time), complex
 |---|---|---|
 | `forwardtaper` | `0.2` | Window decay rate looking backward from τ (anti-causal side). Larger = slower decay = wider window. |
 | `backwardtaper` | `0.1` | Window decay rate looking forward from τ (causal side). |
-| `curvature` | `312.5` | Activates the hyperbolic asymmetry for `\|t\| ≳ √curvature`. For sample-indexed time (`t = np.arange(n)`), the default is appropriate. For normalised time (`t ∈ [0,1]`), use `curvature ≈ 0.25`. |
+| `curvature` | `312.5` | Controls when the hyperbolic asymmetry activates. The asymmetric term in the coordinate transform is `(λf−λb)√(t²+curvature)`, which only differs meaningfully from a constant when `t² ≳ curvature`. **Rule of thumb: set `curvature ≲ (max signal duration)²`.** For sample-indexed time (`t = np.arange(n)`), the default 312.5 is appropriate. For normalised time (`t ∈ [0,1]`), use `curvature ≈ 0.01–0.25`; otherwise the asymmetry is invisible regardless of `forwardtaper` and `backwardtaper`. |
 
 When `forwardtaper == backwardtaper`, the window is a standard symmetric Gaussian and the result is real-valued.
 
