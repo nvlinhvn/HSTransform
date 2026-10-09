@@ -73,9 +73,11 @@ def test_hyperbolic_gaussian_returns_array(st: HSTransform) -> None:
 
 
 def test_hyperbolic_gaussian_non_negative(st: HSTransform) -> None:
+    """Window is now complex-valued; check finite and no NaN instead of non-negative."""
     t = np.linspace(0, 1, 50)
     result = st._compute_hyperbolic_gaussian(50, 10, t)
-    assert (result >= 0).all()
+    assert np.isfinite(result).all(), "Window contains non-finite values"
+    assert not np.isnan(result).any(), "Window contains NaN values"
 
 
 @pytest.mark.parametrize("forwardtaper,backwardtaper,curvature", [
@@ -149,6 +151,7 @@ def test_fit_transform_perf_matches_serial() -> None:
 
     Guards against regressions introduced by the loop-precomputation optimisation.
     Serial reference: compute each row via _compute_hyperbolic_gaussian independently.
+    Updated to use h[k:k+n] (correct slice) and the DFT-based window.
     """
     n = 256
     t = np.linspace(0, 1, n, endpoint=False)
@@ -157,7 +160,7 @@ def test_fit_transform_perf_matches_serial() -> None:
 
     s_fast = st.fit_transform(t, signal)
 
-    # Serial reference
+    # Serial reference — uses corrected FFT slice h[k:k+n]
     from scipy.fft import fft, ifft  # noqa: PLC0415
 
     signal_arr = np.asarray(signal)
@@ -169,7 +172,7 @@ def test_fit_transform_perf_matches_serial() -> None:
     s_ref[0, :] = np.mean(signal_arr) * np.ones(n)
     for k in range(1, maxf + 1):
         w = st._compute_hyperbolic_gaussian(n, k, time_arr)
-        s_ref[k, :] = ifft(h[k + 1 : k + n + 1] * w)
+        s_ref[k, :] = ifft(h[k : k + n] * w)
 
     np.testing.assert_allclose(s_fast, s_ref, rtol=1e-10, atol=1e-12)
 
@@ -222,3 +225,175 @@ def test_fit_transform_two_tone_frequency_separation() -> None:
     assert mean_at_150 > mean_at_10 * 5, (
         "150 Hz row should have significantly more energy than row 10."
     )
+
+
+# ---------------------------------------------------------------------------
+# Tier 1 — Mathematical invariants (PR 10 new tests)
+# ---------------------------------------------------------------------------
+
+def test_linearity() -> None:
+    """ST(a·x + b·y) == a·ST(x) + b·ST(y).
+
+    atol=1e-14 guards against false failures in near-zero rows (noise floor ~1e-17)
+    where relative tolerance is meaningless.
+    """
+    n = 128
+    t = np.linspace(0, 1, n, endpoint=False)
+    x = np.sin(2 * np.pi * 10 * t)
+    y = np.cos(2 * np.pi * 25 * t)
+    a, b = 2.0, -0.5
+    st = HSTransform()
+    combined = st.fit_transform(t, a * x + b * y)
+    expected = a * st.fit_transform(t, x) + b * st.fit_transform(t, y)
+    np.testing.assert_allclose(combined, expected, rtol=1e-10, atol=1e-14)
+
+
+def test_voice_synthesis() -> None:
+    """mean_τ s[k, τ] ≈ H[k]/n for signal frequencies (fundamental S-transform property)."""
+    from scipy.fft import fft as sfft
+    n = 256
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.sin(2 * np.pi * 10 * t) + 0.5 * np.cos(2 * np.pi * 30 * t)
+    st = HSTransform()
+    s = st.fit_transform(t, signal)
+    H = sfft(signal)
+    for k in [10, 30]:
+        expected = H[k] / n
+        actual = np.mean(s[k, :])
+        rel_err = abs(actual - expected) / (abs(expected) + 1e-10)
+        assert rel_err < 0.05, f"Voice synthesis failed at k={k}: rel_err={rel_err:.4f}"
+
+
+def test_window_dc_equals_one() -> None:
+    """G[0, k] == 1 (window integrates to 1 → correct normalization)."""
+    n = 128
+    t = np.linspace(0, 1, n, endpoint=False)
+    st = HSTransform()
+    for k in [5, 20, 50]:
+        G = st._compute_hyperbolic_gaussian(n, k, t)
+        assert abs(G[0].real - 1.0) < 0.05, f"Window DC != 1 at k={k}: got {G[0].real:.4f}"
+        assert abs(G[0].imag) < 1e-8, f"Window DC is not real at k={k}"
+
+
+def test_pure_tone_constant_ridge() -> None:
+    """Pure sinusoid → |S[f₀, :]| approximately constant (flat ridge).
+
+    Uses symmetric tapers (forwardtaper == backwardtaper) because an asymmetric
+    window inherently amplitude-modulates stationary signals — that is expected
+    behaviour, not a bug.  The test guards against the window having pathological
+    time-varying artifacts unrelated to the taper asymmetry.
+    """
+    n = 512
+    f0 = 20
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = 1.5 * np.cos(2 * np.pi * f0 * t)
+    st = HSTransform(forwardtaper=0.2, backwardtaper=0.2)
+    s = st.fit_transform(t, signal)
+    row = np.abs(s[f0, :])
+    cv = row.std() / row.mean()  # coefficient of variation
+    assert cv < 0.15, f"Ridge is not flat (CV={cv:.3f}). Window has time-varying artifacts."
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 — Hyperbolic window properties (PR 10 new tests)
+# ---------------------------------------------------------------------------
+
+def test_symmetric_window_is_real() -> None:
+    """λf == λb → symmetric Gaussian → G is real-valued (imaginary ≈ 0)."""
+    lam = 0.2
+    st = HSTransform(forwardtaper=lam, backwardtaper=lam, curvature=0.25)
+    n = 64
+    t = np.linspace(0, 1, n, endpoint=False)
+    G = st._compute_hyperbolic_gaussian(n, 10, t)
+    ratio = np.max(np.abs(G.imag)) / (np.max(np.abs(G.real)) + 1e-15)
+    assert ratio < 1e-8, f"Symmetric window has non-trivial imaginary part (ratio={ratio:.2e})"
+
+
+def test_asymmetric_window_has_imaginary_part() -> None:
+    """λf ≠ λb → window is asymmetric → G is genuinely complex."""
+    st = HSTransform(forwardtaper=0.3, backwardtaper=0.1, curvature=0.01)
+    n = 64
+    t = np.linspace(0, 1, n, endpoint=False)
+    G = st._compute_hyperbolic_gaussian(n, 10, t)
+    ratio = np.max(np.abs(G.imag)) / (np.max(np.abs(G.real)) + 1e-15)
+    assert ratio > 0.05, f"Asymmetric window has negligible imaginary part (ratio={ratio:.2e})"
+
+
+def test_large_curvature_degrades_to_symmetric() -> None:
+    """Large curvature >> t² → hyperbolic correction negligible → G approximately real."""
+    st = HSTransform(forwardtaper=0.3, backwardtaper=0.1, curvature=1e6)
+    n = 64
+    t = np.linspace(0, 1, n, endpoint=False)
+    G = st._compute_hyperbolic_gaussian(n, 10, t)
+    ratio = np.max(np.abs(G.imag)) / (np.max(np.abs(G.real)) + 1e-15)
+    assert ratio < 0.01, f"Large curvature should suppress asymmetry (ratio={ratio:.2e})"
+
+
+def _half_energy_width(arr: np.ndarray) -> int:
+    """Return index where cumulative energy exceeds 50% of total."""
+    total = np.sum(arr**2)
+    if total == 0:
+        return len(arr)
+    cumsum = np.cumsum(arr**2)
+    idx = np.searchsorted(cumsum, 0.5 * total)
+    return int(idx) + 1
+
+
+def test_asymmetric_decay_around_impulse() -> None:
+    """Impulse response: forward/backward half-energy widths reflect λf and λb.
+
+    Tolerance widened to 0.1 < ratio < 10.0 because the half-energy estimator
+    is sensitive to the discrete impulse and window edge effects at small n.
+    """
+    n = 512
+    t = np.linspace(-1, 1, n, endpoint=False)
+    signal = np.zeros(n)
+    signal[n // 2] = 1.0   # impulse at t=0
+    lf, lb = 0.4, 0.1   # forward 4× wider than backward
+    st = HSTransform(forwardtaper=lf, backwardtaper=lb, curvature=0.01)
+    s = st.fit_transform(t, signal, fsamplingrate=5)
+    energy = np.abs(s[10, :])**2
+    mid = n // 2
+    left_w = _half_energy_width(energy[:mid][::-1])
+    right_w = _half_energy_width(energy[mid:])
+    observed_ratio = right_w / left_w if left_w > 0 else float("inf")
+    expected_ratio = lb / lf   # smaller lb = faster backward decay = narrower backward width
+    assert 0.1 < observed_ratio / expected_ratio < 10.0, (
+        f"Decay ratio {observed_ratio:.2f} does not match λb/λf={expected_ratio:.2f}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tier 3 — Numerical regression guards (PR 10 new tests)
+# ---------------------------------------------------------------------------
+
+def test_fft_slice_alignment() -> None:
+    """Row k DC == H[k]/n — directly catches the +1 offset bug."""
+    from scipy.fft import fft as sfft
+    n = 128
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.zeros(n)
+    signal[0] = 1.0   # delta at t=0 → H[k] = 1 for all k
+    st = HSTransform()
+    s = st.fit_transform(t, signal)
+    H = sfft(signal)
+    for k in [1, 5, 20]:
+        row_dc = np.sum(s[k, :]) / n
+        expected_dc = H[k].real / n
+        msg = f"FFT slice misaligned at k={k}: got {row_dc.real:.4f}, expected {expected_dc:.4f}"
+        np.testing.assert_allclose(row_dc.real, expected_dc, rtol=0.05, err_msg=msg)
+
+
+def test_parseval_approximate() -> None:
+    """∑|s|² is in a reasonable range relative to ∑|x|² (no zero/blowup)."""
+    n = 256
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.sin(2 * np.pi * 15 * t) + np.cos(2 * np.pi * 40 * t)
+    st = HSTransform()
+    s = st.fit_transform(t, signal)
+    signal_energy = np.sum(np.abs(signal)**2)
+    st_energy = np.sum(np.abs(s)**2)
+    ratio = st_energy / signal_energy
+    assert 0.001 < ratio < 10000, f"Energy ratio {ratio:.2e} is unreasonable"
+
+

@@ -49,8 +49,12 @@ class HSTransform:
 
     def _compute_hyperbolic_gaussian(
         self, freq_len: int, n: int, time: npt.NDArray[np.floating[Any]]
-    ) -> npt.NDArray[np.floating[Any]]:
+    ) -> npt.NDArray[np.complexfloating[Any, Any]]:
         """Compute the hyperbolic Gaussian window for a single frequency index.
+
+        The window is computed as the DFT of the time-domain hyperbolic Gaussian,
+        yielding a complex-valued frequency-domain window that correctly encodes
+        both amplitude and phase for asymmetric (λf ≠ λb) tapers.
 
         Thin wrapper around _build_window_matrix for a single frequency step.
 
@@ -60,11 +64,11 @@ class HSTransform:
             time: 1D array of time values.
 
         Returns:
-            1D array of length freq_len: window weights.
+            1D complex array of length freq_len: frequency-domain window weights.
         """
         freq_steps = np.array([n], dtype=np.intp)
         W = self._build_window_matrix(freq_len, time, freq_steps)
-        result: npt.NDArray[np.floating[Any]] = W[0]
+        result: npt.NDArray[np.complexfloating[Any, Any]] = W[0]
         return result
 
     def _build_window_matrix(
@@ -72,11 +76,16 @@ class HSTransform:
         n: int,
         time: npt.NDArray[np.floating[Any]],
         freq_steps: npt.NDArray[np.intp],
-    ) -> npt.NDArray[np.floating[Any]]:
+    ) -> npt.NDArray[np.complexfloating[Any, Any]]:
         """Compute the hyperbolic Gaussian window for all frequency steps at once.
 
-        Precomputes the x-transform and the base quadratic form A = vectorf² × x² once,
-        then evaluates exp(-A / (2k²)) for each k without redundant allocations.
+        The correct algorithm computes the frequency-domain window as the DFT of the
+        time-domain hyperbolic Gaussian g(t) = (|f|/√2π) exp(-x(t)²·f²/2), where
+        x(t) is the hyperbolic coordinate transform. This yields a complex-valued
+        window that correctly represents asymmetric (λf ≠ λb) tapers via phase.
+
+        The DFT approach also naturally produces W[0] = 1 (correct DC normalisation),
+        fixing the original bug where the DC was forced to zero by a prefactor of 2f.
 
         Args:
             n: signal length (also the frequency vector length).
@@ -84,41 +93,43 @@ class HSTransform:
             freq_steps: 1D array of frequency indices, shape (K,).
 
         Returns:
-            Window matrix of shape (K, n): row j is w_hy for freq_steps[j].
+            Complex window matrix of shape (K, n): row j is W for freq_steps[j].
         """
         lambdaf = self.forwardtaper
         lambdab = self.backwardtaper
         lambda_val = self.curvature
-        norm = 2.0 / ((lambdaf + lambdab) * np.sqrt(2.0 * np.pi))
 
-        # x depends only on time — compute once for all frequency steps
+        # dt from signal time axis (used to scale DFT to approximate continuous FT)
+        dt = float(time[1] - time[0]) if len(time) > 1 else 1.0
+
+        # Centered time axis for window evaluation — independent of signal time offset.
+        # np.fft.fftfreq(n) * n * dt gives indices [0, 1, ..., n//2, -n//2+1, ..., -1] * dt,
+        # which is the natural centered, zero-origin axis for a DFT window.
+        t_w: npt.NDArray[np.floating[Any]] = np.fft.fftfreq(n) * n * dt
+
+        # Hyperbolic coordinate transform on centered axis
         x_1d: npt.NDArray[np.floating[Any]] = (
-            (lambdaf + lambdab) * time / (2.0 * lambdaf * lambdab)
-            + (lambdaf - lambdab)
-            * np.sqrt(time**2 + lambda_val)
-            / (2.0 * lambdaf * lambdab)
+            (lambdaf + lambdab) * t_w / (2.0 * lambdaf * lambdab)
+            + (lambdaf - lambdab) * np.sqrt(t_w**2 + lambda_val) / (2.0 * lambdaf * lambdab)
         )
-        # Note: the original code used np.tile(x_1d, (1,2)).T → shape (2n,1), which produces
-        # two identical copies of x_1d. The resulting (2n,n) matrix is therefore two stacked
-        # copies of an (n,n) matrix, so sum(g, axis=0) = 2 × sum(g[:n], axis=0).
-        # We exploit this to halve the matrix size and computation.
-        x_col: npt.NDArray[np.floating[Any]] = x_1d.reshape(-1, 1)  # shape (n, 1)
+        # Centre x so the window peaks at t=0 regardless of forward/backward asymmetry
+        x_1d = x_1d - x_1d[0]
 
-        # vectorf and its square — same for every k
-        vectorf: npt.NDArray[np.floating[Any]] = np.arange(0, n, dtype=float)
-
-        # Precompute A = vectorf² ⊗ x²: shape (n, n) — the expensive part, done once.
-        # Factor of 2 accounts for the removed tile duplication.
-        A: npt.NDArray[np.floating[Any]] = (vectorf**2)[None, :] * x_col**2
-        prefactor = norm * 2.0 * vectorf  # absorbs the duplicate-tile factor of 2
-
-        # Build the full window matrix in a single loop that only does cheap ops per k
         K = len(freq_steps)
-        W: npt.NDArray[np.floating[Any]] = np.empty((K, n))
+        W: npt.NDArray[np.complexfloating[Any, Any]] = np.empty((K, n), dtype=complex)
         for i, k in enumerate(freq_steps):
-            g = prefactor * np.exp(-A / (2.0 * float(k) ** 2))
-            W[i] = np.sum(g, axis=0)
-
+            k_f = float(k)
+            # Time-domain hyperbolic Gaussian: g(t) = (|f|/√2π) exp(-x²·f²/2)
+            g = (k_f / np.sqrt(2.0 * np.pi)) * np.exp(-x_1d**2 * k_f**2 / 2.0)
+            # Normalize so ∫g(t)dt = 1 (required for voice synthesis: mean_τ S[k,τ] = H[k]/n).
+            # The hyperbolic coordinate transform stretches time, so the raw Gaussian does not
+            # integrate to 1 in general; dividing by the discrete integral corrects this.
+            g_integral = float(np.sum(g)) * dt
+            if g_integral > 1e-15:
+                g = g / g_integral
+            # Frequency-domain window = DFT of g, scaled by dt to approximate ∫g(t)e^{-iωt}dt.
+            # W[0] = sum(g)*dt = 1 after normalization (unit DC).
+            W[i] = fft(g) * dt
         return W
 
     def fit_transform(
@@ -160,12 +171,13 @@ class HSTransform:
         freq_steps = np.arange(fsamplingrate, maxf - minf + 1, fsamplingrate, dtype=np.intp)
         k_abs = (minf + freq_steps).astype(np.intp)  # absolute frequency indices
 
-        # Build all window vectors in one pass (x and A precomputed once)
+        # Build all window vectors in one pass
         W = self._build_window_matrix(n, time_arr, k_abs)
 
-        # Build the full FFT slice matrix: row j = h[k+1 : k+n+1], shape (K, n)
+        # Build the FFT slice matrix: row j = h[k : k+n], shape (K, n)
+        # (corrected from the original MATLAB 1-based indexing h[k+1 : k+n+1])
         H: npt.NDArray[np.complexfloating[Any, Any]] = np.stack(
-            [h[k + 1 : k + n + 1] for k in k_abs]
+            [h[k : k + n] for k in k_abs]
         )
 
         # Batch IFFT across all frequency rows in one call
