@@ -27,6 +27,11 @@ dev = [
     "mypy",
     "ruff",
 ]
+notebook = [
+    "matplotlib>=3.7",
+    "pywavelets>=1.4",
+    "jupyter>=1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/nvlinhvn/HSTransform"
