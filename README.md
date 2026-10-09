@@ -187,7 +187,7 @@ Localization of the complex spectrum: the S transform.
 
 If you use HSTransform in your research, please cite:
 
-> Linh V Nguyen (2024). HSTransform (Version 0.2) [Computer software]. GitHub: github.com/nvlinhvn/HSTransform
+> Linh V Nguyen (2024). HSTransform (Version 0.2.1) [Computer software]. GitHub: github.com/nvlinhvn/HSTransform
 
 ---
 
