@@ -1,10 +1,16 @@
 # Hyperbolic S-Transform
 
+[![PyPI version](https://img.shields.io/pypi/v/HSTransform?color=blue)](https://pypi.org/project/HSTransform/)
 [![PyPI Downloads](https://static.pepy.tech/badge/hstransform)](https://pepy.tech/project/hstransform)
 [![PyPI Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
-[![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
+[![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
+[![Tests](https://img.shields.io/badge/tests-62%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](https://mypy-lang.org/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-orange)](https://github.com/astral-sh/ruff)
+[![DOI](https://img.shields.io/badge/DOI-10.1109%2FPES.2018.8423487-blue)](https://ieeexplore.ieee.org/document/8423487)
 
 ## 1. Introduction
 
