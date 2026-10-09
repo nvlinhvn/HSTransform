@@ -1,50 +1,42 @@
 import dataclasses
-from typing import Union
+from collections.abc import Sequence
 
 import numpy as np
 from scipy.fft import fft, ifft
-import pandas as pd
 
 
 @dataclasses.dataclass
 class HSTransform:
-    """
-    A class used to represent the S-transform with a hyperbolic Gaussian window.
+    """S-transform with a hyperbolic Gaussian window.
 
-    ...
-
-    Attributes
-    ----------
-    forwardtaper : float
-        forward taper value
-    backwardtaper : float
-        backward taper value
-    curvature : float
-        curvature value
+    Combines properties of the Short-time Fourier Transform and Wavelet Transform.
     """
 
     forwardtaper: float = 0.2
     backwardtaper: float = 0.1
     curvature: float = 312.5
 
-    def _input_validation(self, input_signal):
+    def _input_validation(self, input_signal: np.ndarray | Sequence[float]) -> None:
+        """Validate that input_signal is array-like and contains only finite numbers.
+
+        Raises:
+            TypeError: if input_signal is not array-like (ndarray, list, or similar sequence).
+            ValueError: if input_signal contains NaN or non-numeric values.
         """
-        Validates the input signal.
+        try:
+            input_array = np.asarray(input_signal)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"input_signal must be array-like (ndarray, list, pd.Series, …), "
+                f"got {type(input_signal)}."
+            ) from exc
 
-        Parameters
-        ----------
-            input_signal : np.ndarray, pd.Series, or list
+        if not isinstance(input_signal, (np.ndarray, list, Sequence)):
+            raise TypeError(
+                f"input_signal must be array-like (ndarray, list, pd.Series, …), "
+                f"got {type(input_signal)}."
+            )
 
-        Raises
-        ------
-            TypeError: If input_signal is not a numpy array, pandas Series, or list.
-            ValueError: If input_signal contains non-numerical values.
-        """
-        valid_types = (np.ndarray, pd.Series, list)
-        if not isinstance(input_signal, valid_types):
-            raise TypeError(f"input_signal must be one of the following types: {valid_types}, not {type(input_signal)}.")
-
-        input_array = np.array(input_signal)
         if np.isnan(input_array).any():
             raise ValueError("input_signal contains null values.")
 
@@ -52,84 +44,67 @@ class HSTransform:
             raise ValueError("input_signal should only contain numerical values.")
 
     def _compute_hyperbolic_gaussian(self, l: int, n: int, time: np.ndarray) -> np.ndarray:
-        """
-        Computes the hyperbolic Gaussian window.
+        """Compute the hyperbolic Gaussian window.
 
-        Parameters
-        ----------
-            l : int
-                length of the signal
-            n : int
-                frequency point
-            time : np.ndarray
-                time values of the signal
+        Args:
+            l: length of the frequency vector (determines output length).
+            n: frequency index used to scale the Gaussian.
+            time: 1D array of time values.
 
-        Returns
-        -------
-            g : np.ndarray
-                hyperbolic Gaussian window
+        Returns:
+            1D array of length l: the summed window weights per time step.
         """
         vectorf = np.arange(0, l)
         vectorf1 = vectorf**2
         lambdaf = self.forwardtaper
         lambdab = self.backwardtaper
         lambda_val = self.curvature
-        x = (lambdaf + lambdab) * time / (2 * lambdaf * lambdab) + (lambdaf - lambdab) * np.sqrt(time**2 + lambda_val) / (2 * lambdaf * lambdab)
+        x = (
+            (lambdaf + lambdab) * time / (2 * lambdaf * lambdab)
+            + (lambdaf - lambdab) * np.sqrt(time**2 + lambda_val) / (2 * lambdaf * lambdab)
+        )
         x = np.tile(x, (1, 2)).T
         vectorf2 = -vectorf1 * x**2 / (2 * n**2)
         g = 2 * np.abs(vectorf) * np.exp(vectorf2) / ((lambdaf + lambdab) * np.sqrt(2 * np.pi))
-        # axis=0 matches MATLAB sum(g) behaviour: sum along columns → 1D array of length n
+        # axis=0 matches MATLAB sum(g) behaviour: sum along columns → 1D array of length l
         return np.sum(g, axis=0)
 
-    def fit_transform(self,
-                      time_values: Union[pd.Series, np.ndarray, list],
-                      input_signal: Union[pd.Series, np.ndarray, list],
-                      minf: int = 0,
-                      fsamplingrate: int = 1) -> np.ndarray:
-        """
-        Computes the S-transform of the input signal.
+    def fit_transform(
+        self,
+        time_values: np.ndarray | Sequence[float],
+        input_signal: np.ndarray | Sequence[float],
+        minf: int = 0,
+        fsamplingrate: int = 1,
+    ) -> np.ndarray:
+        """Compute the S-transform of the input signal.
 
-        Parameters
-        ----------
-            time_values : np.ndarray
-                time values of the signal
-            input_signal : np.ndarray
-                input signal
-            minf : int
-                minimum frequency point
-            fsamplingrate : int
-                frequency sampling rate
+        Args:
+            time_values: time values corresponding to each sample.
+            input_signal: the signal to transform.
+            minf: minimum frequency index.
+            fsamplingrate: frequency sampling step.
 
-        Returns
-        -------
-            S : np.ndarray
-                S-transform of the input signal
+        Returns:
+            Complex ndarray of shape ((maxf - minf + 1) // fsamplingrate, n).
         """
-        # Validate the input
         self._input_validation(input_signal)
 
-        # Convert to numpy arrays if they are not array types
-        if not isinstance(time_values, np.ndarray):
-            time_values = np.array(time_values)
-        if not isinstance(input_signal, np.ndarray):
-            input_signal = np.array(input_signal)
+        time_values = np.asarray(time_values)
+        input_signal = np.asarray(input_signal)
 
         n = len(input_signal)
-        # Make sure the max frequency to be optimized (Cover the 6th, 12th, or 18th harmonic respectively)
+        # Cap at 900 to cover up to the 18th harmonic of 50 Hz at 1 kHz sampling
         maxf = min(900, n // 2)
 
-        # Compute the fft of input
         h = fft(input_signal)
         h = np.concatenate((h, h))
 
-        # S output
-        s = np.zeros(((maxf - minf + 1) // fsamplingrate, n), dtype='complex')
+        s = np.zeros(((maxf - minf + 1) // fsamplingrate, n), dtype="complex")
         # MATLAB: 1 & [1:N] is logical AND → all ones. Python: 1 & array is bitwise AND → [1,0,1,0,...].
         s[0, :] = np.mean(input_signal) * np.ones(n)
 
-        # Increment the frequency point
         for k in range(fsamplingrate, maxf - minf + 1, fsamplingrate):
             w_hy = self._compute_hyperbolic_gaussian(n, minf + k, time_values)
-            s[k // fsamplingrate, :] = ifft(h[minf + k + 1:minf + k + n+1] * w_hy)
+            s[k // fsamplingrate, :] = ifft(h[minf + k + 1 : minf + k + n + 1] * w_hy)
 
         return s
