@@ -1,12 +1,9 @@
 # Hyperbolic S-Transform
 
-[![PyPI version](https://img.shields.io/pypi/v/HSTransform?color=blue&label=PyPI)](https://pypi.org/project/HSTransform/)
-[![Downloads](https://static.pepy.tech/badge/hstransform)](https://pepy.tech/project/hstransform)
-[![Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
-[![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
+[![PyPI Downloads](https://static.pepy.tech/badge/hstransform)](https://pepy.tech/project/hstransform)
+[![PyPI Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
-[![Python](https://img.shields.io/pypi/pyversions/HSTransform)](https://pypi.org/project/HSTransform/)
-[![License](https://img.shields.io/github/license/nvlinhvn/HSTransform)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-orange)](https://github.com/astral-sh/ruff)
 
 ## 1. Introduction
