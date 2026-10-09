@@ -33,6 +33,24 @@ def test_hyperbolic_gaussian_returns_array():
     assert result.shape == (n,), f"Expected shape ({n},) but got {result.shape}"
 
 
+def test_fit_transform_dc_row_constant():
+    """
+    Regression for Bug 2: the DC row (frequency=0) must equal the signal mean
+    at every time step. In MATLAB 1 & [1:N] is logical AND → all ones.
+    In Python 1 & array is bitwise AND → alternating [1,0,1,0,...].
+    """
+    t = np.linspace(0, 2, 200)
+    signal = np.sin(2 * np.pi * 50 * t) + 0.5  # non-zero mean
+    st = HSTransform()
+    s = st.fit_transform(t, signal)
+    expected_dc = np.mean(signal)
+    assert np.allclose(s[0, :].real, expected_dc, atol=1e-10), (
+        f"DC row should be constant {expected_dc:.4f} but got values ranging "
+        f"[{s[0, :].real.min():.4f}, {s[0, :].real.max():.4f}]. "
+        "Alternating pattern means bitwise AND bug (Bug 2) is still present."
+    )
+
+
 def test_fit_transform():
     t = np.linspace(0, 2, 100)
     signal = np.sin(2 * np.pi * 50 * t)

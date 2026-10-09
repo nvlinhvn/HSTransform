@@ -124,7 +124,8 @@ class HSTransform:
 
         # S output
         s = np.zeros(((maxf - minf + 1) // fsamplingrate, n), dtype='complex')
-        s[0, :] = np.mean(input_signal) * (1 & np.arange(1, n + 1))
+        # MATLAB: 1 & [1:N] is logical AND → all ones. Python: 1 & array is bitwise AND → [1,0,1,0,...].
+        s[0, :] = np.mean(input_signal) * np.ones(n)
 
         # Increment the frequency point
         for k in range(fsamplingrate, maxf - minf + 1, fsamplingrate):
