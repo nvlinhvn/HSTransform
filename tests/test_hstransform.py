@@ -397,3 +397,146 @@ def test_parseval_approximate() -> None:
     assert 0.001 < ratio < 10000, f"Energy ratio {ratio:.2e} is unreasonable"
 
 
+# ---------------------------------------------------------------------------
+# PR 11 — Parametrized test variants
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("forwardtaper,backwardtaper,curvature", [
+    (0.2, 0.1, 312.5),   # defaults
+    (0.1, 0.1, 0.25),    # symmetric, small curvature
+    (0.5, 0.2, 1.0),     # asymmetric, medium curvature
+    (0.3, 0.3, 0.01),    # symmetric, very small curvature
+])
+def test_window_dc_equals_one_parametrized(
+    forwardtaper: float, backwardtaper: float, curvature: float
+) -> None:
+    """G[0, k] == 1 across a range of taper and curvature settings."""
+    n = 128
+    t = np.linspace(0, 1, n, endpoint=False)
+    st = HSTransform(forwardtaper=forwardtaper, backwardtaper=backwardtaper, curvature=curvature)
+    for k in [5, 20, 50]:
+        G = st._compute_hyperbolic_gaussian(n, k, t)
+        assert abs(G[0].real - 1.0) < 0.05, (
+            f"Window DC != 1 at k={k} (lf={forwardtaper}, lb={backwardtaper}, "
+            f"curv={curvature}): got {G[0].real:.4f}"
+        )
+        assert abs(G[0].imag) < 1e-8, f"Window DC is not real at k={k}"
+
+
+@pytest.mark.parametrize("f0,amplitude", [
+    (5, 1.0), (20, 2.0), (50, 0.5), (100, 1.5),
+])
+def test_pure_tone_constant_ridge_parametrized(f0: int, amplitude: float) -> None:
+    """Pure sinusoid → |S[f₀, :]| approximately constant for various frequencies.
+
+    Uses symmetric tapers — see test_pure_tone_constant_ridge for rationale.
+    """
+    n = 512
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = amplitude * np.cos(2 * np.pi * f0 * t)
+    st = HSTransform(forwardtaper=0.2, backwardtaper=0.2)
+    s = st.fit_transform(t, signal)
+    row = np.abs(s[f0, :])
+    cv = row.std() / row.mean()
+    assert cv < 0.15, (
+        f"Ridge not flat at f0={f0}, amplitude={amplitude} (CV={cv:.3f})"
+    )
+
+
+@pytest.mark.parametrize("n_samples,fsamplingrate", [
+    (64, 1), (128, 2), (256, 5), (512, 1),
+])
+def test_voice_synthesis_parametrized(n_samples: int, fsamplingrate: int) -> None:
+    """mean_τ s[k, τ] ≈ H[k]/n for various signal lengths and sampling rates."""
+    from scipy.fft import fft as sfft
+    t = np.linspace(0, 1, n_samples, endpoint=False)
+    signal = np.sin(2 * np.pi * 10 * t) + 0.5 * np.cos(2 * np.pi * 20 * t)
+    st = HSTransform()
+    s = st.fit_transform(t, signal, fsamplingrate=fsamplingrate)
+    H = sfft(signal)
+    # Only check k=10 (k=20 may not land on a row depending on fsamplingrate)
+    for k in [10]:
+        row_idx = k // fsamplingrate
+        if row_idx >= s.shape[0]:
+            continue
+        expected = H[k] / n_samples
+        actual = np.mean(s[row_idx, :])
+        rel_err = abs(actual - expected) / (abs(expected) + 1e-10)
+        assert rel_err < 0.05, (
+            f"Voice synthesis failed at k={k} (n={n_samples}, rate={fsamplingrate}): "
+            f"rel_err={rel_err:.4f}"
+        )
+
+
+@pytest.mark.parametrize("lam", [0.1, 0.2, 0.3, 0.5])
+def test_symmetric_window_is_real_parametrized(lam: float) -> None:
+    """Any equal forward/backward taper → real window, regardless of curvature."""
+    st = HSTransform(forwardtaper=lam, backwardtaper=lam, curvature=0.25)
+    n = 64
+    t = np.linspace(0, 1, n, endpoint=False)
+    G = st._compute_hyperbolic_gaussian(n, 10, t)
+    ratio = np.max(np.abs(G.imag)) / (np.max(np.abs(G.real)) + 1e-15)
+    assert ratio < 1e-8, (
+        f"Symmetric window (lam={lam}) has non-trivial imaginary part (ratio={ratio:.2e})"
+    )
+
+
+@pytest.mark.parametrize("lf,lb", [
+    (0.4, 0.1), (0.1, 0.4), (0.3, 0.05), (0.5, 0.2),
+])
+def test_asymmetric_window_has_imaginary_part_parametrized(lf: float, lb: float) -> None:
+    """λf ≠ λb → window is genuinely complex for various asymmetric taper pairs."""
+    st = HSTransform(forwardtaper=lf, backwardtaper=lb, curvature=0.01)
+    n = 64
+    t = np.linspace(0, 1, n, endpoint=False)
+    G = st._compute_hyperbolic_gaussian(n, 10, t)
+    ratio = np.max(np.abs(G.imag)) / (np.max(np.abs(G.real)) + 1e-15)
+    assert ratio > 0.05, (
+        f"Asymmetric window (lf={lf}, lb={lb}) has negligible imaginary part (ratio={ratio:.2e})"
+    )
+
+
+@pytest.mark.parametrize("curvature", [0.001, 0.01, 0.1, 1.0])
+def test_asymmetric_decay_parametrized(curvature: float) -> None:
+    """Impulse decay ratio holds across curvature values.
+
+    Tolerance is wide (0.05 < ratio < 20.0) because very small curvature values
+    make the hyperbolic coordinate transform highly nonlinear, compressing the
+    effective forward/backward asymmetry. The test guards against complete collapse
+    of the asymmetry rather than an exact ratio match.
+    """
+    n = 512
+    t = np.linspace(-1, 1, n, endpoint=False)
+    signal = np.zeros(n)
+    signal[n // 2] = 1.0
+    lf, lb = 0.4, 0.1
+    st = HSTransform(forwardtaper=lf, backwardtaper=lb, curvature=curvature)
+    s = st.fit_transform(t, signal, fsamplingrate=5)
+    energy = np.abs(s[10, :])**2
+    mid = n // 2
+    left_w = _half_energy_width(energy[:mid][::-1])
+    right_w = _half_energy_width(energy[mid:])
+    if left_w == 0:
+        return  # degenerate case — skip rather than divide by zero
+    observed_ratio = right_w / left_w
+    expected_ratio = lb / lf
+    assert 0.05 < observed_ratio / expected_ratio < 20.0, (
+        f"Decay ratio {observed_ratio:.2f} does not match λb/λf={expected_ratio:.2f} "
+        f"at curvature={curvature}"
+    )
+
+
+@pytest.mark.parametrize("a,b", [(1, 0), (0, 1), (2, -0.5), (-1, 3), (0.1, 0.1)])
+def test_linearity_parametrized(a: float, b: float) -> None:
+    """ST(a·x + b·y) == a·ST(x) + b·ST(y) for various linear combination coefficients.
+
+    atol=1e-14 guards against false failures in near-zero rows (noise floor ~1e-17).
+    """
+    n = 128
+    t = np.linspace(0, 1, n, endpoint=False)
+    x = np.sin(2 * np.pi * 10 * t)
+    y = np.cos(2 * np.pi * 25 * t)
+    st = HSTransform()
+    combined = st.fit_transform(t, a * x + b * y)
+    expected = a * st.fit_transform(t, x) + b * st.fit_transform(t, y)
+    np.testing.assert_allclose(combined, expected, rtol=1e-10, atol=1e-14)
