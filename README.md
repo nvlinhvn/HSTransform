@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/HSTransform?color=blue)](https://pypi.org/project/HSTransform/)
 [![PyPI Downloads](https://static.pepy.tech/badge/hstransform)](https://pepy.tech/project/hstransform)
 [![PyPI Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
-[![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
+[![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
 [![Tests](https://img.shields.io/badge/tests-62%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
