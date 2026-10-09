@@ -154,7 +154,7 @@ pytest tests/ --cov=hstransform
 
 Four voltage disturbance types (Sag, Swell, Spike, Notch) on a 50 Hz, 220 V signal, compared between HST and Morlet Wavelet:
 
-![Voltage Disturbance](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance.png)
+![Voltage Disturbance](img/power_quality_disturbance.png)
 
 HST evaluates all frequency rows simultaneously, so transient events like spikes and notches appear as clear vertical features across the full spectrum. Morlet concentrates energy around one scale (the dominant frequency), which limits its ability to characterize broadband or impulsive disturbances. The HST y-axis is in exact Hz; Morlet's is a wavelet scale with no direct Hz mapping.
 
@@ -162,7 +162,7 @@ HST evaluates all frequency rows simultaneously, so transient events like spikes
 
 The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a given frequency traces a trajectory in the complex plane that is characteristic of the disturbance type:
 
-![Real-Imag Trajectory](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/power_quality_disturbance_trajectory.png)
+![Real-Imag Trajectory](img/power_quality_disturbance_trajectory.png)
 
 Each disturbance type produces a geometrically distinct shape — circles, ellipses, figure-8s, or patterns with abrupt discontinuities — depending on how the disturbance modifies the amplitude and phase at that frequency. Morlet output is real-valued and cannot produce this class of features.
 
@@ -170,7 +170,7 @@ Each disturbance type produces a geometrically distinct shape — circles, ellip
 
 Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmonics and noise. Asymmetric HST (`λf=0.3`, `λb=0.02`) vs symmetric HST vs Morlet:
 
-![Fault Spectrogram](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_current.png)
+![Fault Spectrogram](img/fault_current.png)
 
 HST captures the full frequency evolution through the fault — the collapse of the fundamental and the emergence of high-frequency transient content are both visible. Morlet tracks a single scale and goes dark when the dominant component disappears, leaving the post-fault transient undetected. The asymmetric window sharpens the fault onset with no pre-event energy smearing.
 
@@ -178,7 +178,7 @@ HST captures the full frequency evolution through the fault — the collapse of 
 
 Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
 
-![Fault Trajectory](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/img/fault_trajectory.png)
+![Fault Trajectory](img/fault_trajectory.png)
 
 Each fault type traces a distinct shape in the complex plane at each frequency — from clean circles in the healthy case to interrupted or starburst patterns under fault conditions. The shapes differ across fault types and across frequency rows, making them usable as discriminative features for fault classification. Morlet provides no equivalent because its output is real-valued and carries no phase information.
 
