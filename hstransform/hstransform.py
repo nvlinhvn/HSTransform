@@ -78,7 +78,8 @@ class HSTransform:
         x = np.tile(x, (1, 2)).T
         vectorf2 = -vectorf1 * x**2 / (2 * n**2)
         g = 2 * np.abs(vectorf) * np.exp(vectorf2) / ((lambdaf + lambdab) * np.sqrt(2 * np.pi))
-        return np.sum(g)
+        # axis=0 matches MATLAB sum(g) behaviour: sum along columns → 1D array of length n
+        return np.sum(g, axis=0)
 
     def fit_transform(self,
                       time_values: Union[pd.Series, np.ndarray, list],
