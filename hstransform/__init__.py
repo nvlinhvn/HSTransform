@@ -1,1 +1,1 @@
-from .hstransform import HSTransform
+from .hstransform import HSTransform as HSTransform

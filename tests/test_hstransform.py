@@ -3,8 +3,7 @@
 import numpy as np
 import pytest
 
-from hstransform import HSTransform
-
+from hstransform import HSTransform  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -54,11 +53,11 @@ def test_input_validation_valid_ndarray(st: HSTransform) -> None:
 # ---------------------------------------------------------------------------
 
 def test_hyperbolic_gaussian(st: HSTransform) -> None:
-    l, n = 1000, 50
+    freq_len, freq_idx = 1000, 50
     t = np.linspace(0, 1, 100)
-    result = st._compute_hyperbolic_gaussian(l, n, t)
+    result = st._compute_hyperbolic_gaussian(freq_len, freq_idx, t)
     assert isinstance(result, np.ndarray)
-    assert result.shape == (l,)
+    assert result.shape == (freq_len,)
 
 
 def test_hyperbolic_gaussian_returns_array(st: HSTransform) -> None:
