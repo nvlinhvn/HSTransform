@@ -50,7 +50,9 @@ class HSTransform:
     def _compute_hyperbolic_gaussian(
         self, freq_len: int, n: int, time: npt.NDArray[np.floating[Any]]
     ) -> npt.NDArray[np.floating[Any]]:
-        """Compute the hyperbolic Gaussian window.
+        """Compute the hyperbolic Gaussian window for a single frequency index.
+
+        Thin wrapper around _build_window_matrix for a single frequency step.
 
         Args:
             freq_len: length of the frequency vector (determines output length).
@@ -58,23 +60,66 @@ class HSTransform:
             time: 1D array of time values.
 
         Returns:
-            1D array of length freq_len: the summed window weights per time step.
+            1D array of length freq_len: window weights.
         """
-        vectorf = np.arange(0, freq_len)
-        vectorf1 = vectorf**2
+        freq_steps = np.array([n], dtype=np.intp)
+        W = self._build_window_matrix(freq_len, time, freq_steps)
+        result: npt.NDArray[np.floating[Any]] = W[0]
+        return result
+
+    def _build_window_matrix(
+        self,
+        n: int,
+        time: npt.NDArray[np.floating[Any]],
+        freq_steps: npt.NDArray[np.intp],
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Compute the hyperbolic Gaussian window for all frequency steps at once.
+
+        Precomputes the x-transform and the base quadratic form A = vectorf² × x² once,
+        then evaluates exp(-A / (2k²)) for each k without redundant allocations.
+
+        Args:
+            n: signal length (also the frequency vector length).
+            time: 1D array of time values, shape (n,).
+            freq_steps: 1D array of frequency indices, shape (K,).
+
+        Returns:
+            Window matrix of shape (K, n): row j is w_hy for freq_steps[j].
+        """
         lambdaf = self.forwardtaper
         lambdab = self.backwardtaper
         lambda_val = self.curvature
-        x = (
-            (lambdaf + lambdab) * time / (2 * lambdaf * lambdab)
-            + (lambdaf - lambdab) * np.sqrt(time**2 + lambda_val) / (2 * lambdaf * lambdab)
+        norm = 2.0 / ((lambdaf + lambdab) * np.sqrt(2.0 * np.pi))
+
+        # x depends only on time — compute once for all frequency steps
+        x_1d: npt.NDArray[np.floating[Any]] = (
+            (lambdaf + lambdab) * time / (2.0 * lambdaf * lambdab)
+            + (lambdaf - lambdab)
+            * np.sqrt(time**2 + lambda_val)
+            / (2.0 * lambdaf * lambdab)
         )
-        x = np.tile(x, (1, 2)).T
-        vectorf2 = -vectorf1 * x**2 / (2 * n**2)
-        g = 2 * np.abs(vectorf) * np.exp(vectorf2) / ((lambdaf + lambdab) * np.sqrt(2 * np.pi))
-        # axis=0 matches MATLAB sum(g) behaviour: sum along columns → 1D array of length freq_len
-        result: npt.NDArray[np.floating[Any]] = np.sum(g, axis=0)
-        return result
+        # Note: the original code used np.tile(x_1d, (1,2)).T → shape (2n,1), which produces
+        # two identical copies of x_1d. The resulting (2n,n) matrix is therefore two stacked
+        # copies of an (n,n) matrix, so sum(g, axis=0) = 2 × sum(g[:n], axis=0).
+        # We exploit this to halve the matrix size and computation.
+        x_col: npt.NDArray[np.floating[Any]] = x_1d.reshape(-1, 1)  # shape (n, 1)
+
+        # vectorf and its square — same for every k
+        vectorf: npt.NDArray[np.floating[Any]] = np.arange(0, n, dtype=float)
+
+        # Precompute A = vectorf² ⊗ x²: shape (n, n) — the expensive part, done once.
+        # Factor of 2 accounts for the removed tile duplication.
+        A: npt.NDArray[np.floating[Any]] = (vectorf**2)[None, :] * x_col**2
+        prefactor = norm * 2.0 * vectorf  # absorbs the duplicate-tile factor of 2
+
+        # Build the full window matrix in a single loop that only does cheap ops per k
+        K = len(freq_steps)
+        W: npt.NDArray[np.floating[Any]] = np.empty((K, n))
+        for i, k in enumerate(freq_steps):
+            g = prefactor * np.exp(-A / (2.0 * float(k) ** 2))
+            W[i] = np.sum(g, axis=0)
+
+        return W
 
     def fit_transform(
         self,
@@ -111,8 +156,20 @@ class HSTransform:
         # MATLAB 1&[1:N] is logical AND (all ones); Python 1&array is bitwise AND ([1,0,1,0,...]).
         s[0, :] = np.mean(signal_arr) * np.ones(n)
 
-        for k in range(fsamplingrate, maxf - minf + 1, fsamplingrate):
-            w_hy = self._compute_hyperbolic_gaussian(n, minf + k, time_arr)
-            s[k // fsamplingrate, :] = ifft(h[minf + k + 1 : minf + k + n + 1] * w_hy)
+        # Frequency indices for which we compute the transform
+        freq_steps = np.arange(fsamplingrate, maxf - minf + 1, fsamplingrate, dtype=np.intp)
+        k_abs = (minf + freq_steps).astype(np.intp)  # absolute frequency indices
+
+        # Build all window vectors in one pass (x and A precomputed once)
+        W = self._build_window_matrix(n, time_arr, k_abs)
+
+        # Build the full FFT slice matrix: row j = h[k+1 : k+n+1], shape (K, n)
+        H: npt.NDArray[np.complexfloating[Any, Any]] = np.stack(
+            [h[k + 1 : k + n + 1] for k in k_abs]
+        )
+
+        # Batch IFFT across all frequency rows in one call
+        row_indices = (freq_steps // fsamplingrate).astype(np.intp)
+        s[row_indices, :] = ifft(H * W, axis=1)
 
         return s

@@ -144,6 +144,36 @@ def test_fit_transform_deterministic(st: HSTransform, simple_signal: tuple) -> N
     np.testing.assert_array_equal(s1, s2)
 
 
+def test_fit_transform_perf_matches_serial() -> None:
+    """Verify batched vectorised output is numerically identical to serial computation.
+
+    Guards against regressions introduced by the loop-precomputation optimisation.
+    Serial reference: compute each row via _compute_hyperbolic_gaussian independently.
+    """
+    n = 256
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.sin(2 * np.pi * 50 * t) + np.sin(2 * np.pi * 150 * t)
+    st = HSTransform()
+
+    s_fast = st.fit_transform(t, signal)
+
+    # Serial reference
+    from scipy.fft import fft, ifft  # noqa: PLC0415
+
+    signal_arr = np.asarray(signal)
+    time_arr = np.asarray(t)
+    maxf = min(900, n // 2)
+    h = np.concatenate((fft(signal_arr),) * 2)
+    n_rows = (maxf - 0) // 1 + 1
+    s_ref = np.zeros((n_rows, n), dtype="complex")
+    s_ref[0, :] = np.mean(signal_arr) * np.ones(n)
+    for k in range(1, maxf + 1):
+        w = st._compute_hyperbolic_gaussian(n, k, time_arr)
+        s_ref[k, :] = ifft(h[k + 1 : k + n + 1] * w)
+
+    np.testing.assert_allclose(s_fast, s_ref, rtol=1e-10, atol=1e-12)
+
+
 # ---------------------------------------------------------------------------
 # Regression tests for confirmed MATLAB→Python porting bugs
 # ---------------------------------------------------------------------------
