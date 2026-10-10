@@ -645,3 +645,141 @@ def test_linearity_parametrized(a: float, b: float) -> None:
     combined = st.fit_transform(t, a * x + b * y)
     expected = a * st.fit_transform(t, x) + b * st.fit_transform(t, y)
     np.testing.assert_allclose(combined, expected, rtol=1e-10, atol=1e-14)
+
+
+# ---------------------------------------------------------------------------
+# Robustness: constructor validation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("kwargs,match", [
+    ({"forwardtaper": 0},    "forwardtaper"),
+    ({"forwardtaper": -0.1}, "forwardtaper"),
+    ({"forwardtaper": float("inf")}, "forwardtaper"),
+    ({"backwardtaper": 0},   "backwardtaper"),
+    ({"backwardtaper": -1},  "backwardtaper"),
+    ({"curvature": 0},       "curvature"),
+    ({"curvature": -1},      "curvature"),
+    ({"curvature": float("nan")}, "curvature"),
+])
+def test_constructor_invalid_params(kwargs: dict, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        HSTransform(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Robustness: signal validation
+# ---------------------------------------------------------------------------
+
+def test_signal_1d_required() -> None:
+    t = np.linspace(0, 1, 10, endpoint=False)
+    signal_2d = np.ones((10, 3))
+    with pytest.raises(ValueError, match="1-D"):
+        HSTransform().fit_transform(t, signal_2d)
+
+
+def test_signal_minimum_length() -> None:
+    with pytest.raises(ValueError, match="2 samples"):
+        HSTransform().fit_transform([0.0], [1.0])
+
+
+def test_signal_infinite_rejected() -> None:
+    t = np.linspace(0, 1, 10, endpoint=False)
+    signal = np.ones(10)
+    signal[3] = float("inf")
+    with pytest.raises(ValueError, match="infinite"):
+        HSTransform().fit_transform(t, signal)
+
+
+def test_signal_nan_rejected() -> None:
+    t = np.linspace(0, 1, 10, endpoint=False)
+    signal = np.ones(10)
+    signal[5] = float("nan")
+    with pytest.raises(ValueError, match="null"):
+        HSTransform().fit_transform(t, signal)
+
+
+# ---------------------------------------------------------------------------
+# Robustness: time array validation
+# ---------------------------------------------------------------------------
+
+def test_time_length_mismatch_rejected() -> None:
+    t = np.linspace(0, 1, 5, endpoint=False)
+    signal = np.ones(10)
+    with pytest.raises(ValueError, match="length"):
+        HSTransform().fit_transform(t, signal)
+
+
+def test_time_non_ascending_rejected() -> None:
+    t = np.array([1.0, 0.8, 0.6, 0.4, 0.2, 0.0])
+    signal = np.ones(6)
+    with pytest.raises(ValueError, match="increasing"):
+        HSTransform().fit_transform(t, signal)
+
+
+def test_time_non_uniform_rejected() -> None:
+    t = np.array([0.0, 0.1, 0.2, 0.4, 0.5, 0.6])  # gap at index 3
+    signal = np.ones(6)
+    with pytest.raises(ValueError, match="uniform"):
+        HSTransform().fit_transform(t, signal)
+
+
+def test_time_infinite_rejected() -> None:
+    t = np.array([0.0, 0.1, float("inf"), 0.3, 0.4, 0.5])
+    signal = np.ones(6)
+    with pytest.raises(ValueError, match="finite"):
+        HSTransform().fit_transform(t, signal)
+
+
+# ---------------------------------------------------------------------------
+# Robustness: frequency parameter validation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("kwargs,exc,match", [
+    ({"minf": -1},           ValueError, "minf"),
+    ({"minf": 200},          ValueError, "minf"),   # minf > maxf
+    ({"fsamplingrate": 0},   ValueError, "fsamplingrate"),
+    ({"fsamplingrate": -1},  ValueError, "fsamplingrate"),
+    ({"maxf": -1},           ValueError, "maxf"),
+    ({"maxf": 99999},        ValueError, "maxf"),   # > n//2
+])
+def test_frequency_params_invalid(kwargs: dict, exc: type, match: str) -> None:
+    n = 64
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.sin(2 * np.pi * 5 * t)
+    with pytest.raises(exc, match=match):
+        HSTransform().fit_transform(t, signal, **kwargs)
+
+
+def test_maxf_configurable() -> None:
+    """Custom maxf limits output rows and matches frequency_axis output."""
+    n = 256
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.sin(2 * np.pi * 10 * t)
+    st = HSTransform()
+
+    s = st.fit_transform(t, signal, maxf=50)
+    freqs = st.frequency_axis(n, t[1] - t[0], maxf=50)
+
+    assert s.shape[0] == len(freqs) == 51   # bins 0..50 inclusive
+    assert s.shape[1] == n
+
+
+# ---------------------------------------------------------------------------
+# Robustness: frequency_axis helper
+# ---------------------------------------------------------------------------
+
+def test_frequency_axis_values() -> None:
+    """frequency_axis rows match physical frequencies of fit_transform output."""
+    n = 256
+    fs = 256.0
+    t = np.arange(n) / fs
+    dt = 1.0 / fs
+    st = HSTransform()
+
+    freqs = st.frequency_axis(n, dt)
+    maxf = min(900, n // 2)
+
+    assert len(freqs) == maxf + 1
+    np.testing.assert_allclose(freqs[0], 0.0)
+    np.testing.assert_allclose(freqs[1], 1.0 / (n * dt), rtol=1e-10)
+    np.testing.assert_allclose(freqs[maxf], maxf / (n * dt), rtol=1e-10)
