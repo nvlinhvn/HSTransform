@@ -24,10 +24,25 @@ class HSTransform:
         self._validate_params(self.forwardtaper, self.backwardtaper, self.curvature)
 
     def __setattr__(self, name: str, value: object) -> None:
-        """Re-validate taper/curvature when a field is mutated after construction."""
-        super().__setattr__(name, value)
+        """Re-validate taper/curvature when a field is mutated after construction.
+
+        Validates the proposed value before storing it so a rejected assignment
+        leaves the instance in its previous valid state.
+        """
         if name in ("forwardtaper", "backwardtaper", "curvature"):
-            self._validate_params(self.forwardtaper, self.backwardtaper, self.curvature)
+            # Read current values; fall back to class defaults during __init__ before
+            # the instance attribute exists.
+            ft = value if name == "forwardtaper" else getattr(
+                self, "forwardtaper", HSTransform.forwardtaper
+            )
+            bt = value if name == "backwardtaper" else getattr(
+                self, "backwardtaper", HSTransform.backwardtaper
+            )
+            cv = value if name == "curvature" else getattr(
+                self, "curvature", HSTransform.curvature
+            )
+            self._validate_params(float(ft), float(bt), float(cv))  # raises before mutation
+        super().__setattr__(name, value)
 
     @staticmethod
     def _validate_params(forwardtaper: float, backwardtaper: float, curvature: float) -> None:
@@ -114,12 +129,26 @@ class HSTransform:
             dt_ref = float(spacings[0])
             if dt_ref <= 0:
                 raise ValueError("time_values must be strictly increasing.")
-            # Use a tolerance scaled to dt_ref so float32 grids and grids with
-            # large absolute origins (e.g. Unix timestamps) are accepted when
-            # spacing is genuinely uniform.  atol handles near-zero dt_ref.
-            atol = max(dt_ref * 1e-4, 1e-9 * (float(time_arr[-1]) - float(time_arr[0])))
-            if not np.allclose(spacings, dt_ref, rtol=1e-4, atol=atol):
+            # Use the mean spacing as the reference for per-interval checks and for
+            # the dt estimate passed to the transform (avoids bias from a rounded
+            # first interval at large absolute origins).
+            dt_mean = float(np.mean(spacings))
+            # Per-spacing tolerance: allow float32/epoch representational rounding
+            # (~1e-4 relative) but reject physically drifting grids.
+            atol = max(dt_mean * 1e-4, 1e-9 * (float(time_arr[-1]) - float(time_arr[0])))
+            if not np.allclose(spacings, dt_mean, rtol=1e-4, atol=atol):
                 raise ValueError("time_values must be uniformly spaced.")
+            # Additional check: accumulated endpoint drift against an ideal arithmetic
+            # progression with the first spacing.  A drifting grid whose individual
+            # per-spacing deviations are small can still shift the endpoint by many
+            # samples, causing material carrier-phase error in the DFT.
+            ideal = time_arr[0] + np.arange(len(time_arr)) * dt_ref
+            max_drift = float(np.max(np.abs(time_arr - ideal)))
+            if max_drift > 0.5 * dt_ref:
+                raise ValueError(
+                    "time_values must be uniformly spaced: accumulated drift "
+                    f"({max_drift:.3g}) exceeds half a sample ({0.5*dt_ref:.3g})."
+                )
 
     def _compute_hyperbolic_gaussian(
         self, freq_len: int, n: int, time: npt.NDArray[np.floating[Any]]
