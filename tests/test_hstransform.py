@@ -942,3 +942,68 @@ def test_direct_sum_oracle_parametrized(
 
     actual = HSTransform(a, b, c).fit_transform(t, x, minf=k, maxf=k)[0]
     np.testing.assert_allclose(actual, expected, rtol=1e-11, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# C1 — Rejected mutations must not leave invalid state
+# ---------------------------------------------------------------------------
+
+def test_rejected_mutation_preserves_valid_forwardtaper() -> None:
+    """C1: a rejected forwardtaper assignment must leave the previous valid value in place."""
+    st = HSTransform(forwardtaper=0.3)
+    with pytest.raises(ValueError, match="forwardtaper"):
+        st.forwardtaper = -0.2
+    assert st.forwardtaper == pytest.approx(0.3), (
+        "forwardtaper should be unchanged after rejected assignment"
+    )
+
+
+def test_rejected_mutation_instance_still_usable() -> None:
+    """C1: fit_transform must still produce finite results after a rejected mutation."""
+    st = HSTransform()
+    try:
+        st.forwardtaper = -0.2
+    except ValueError:
+        pass
+    n = 64
+    t = np.arange(n) * 0.01
+    s = st.fit_transform(t, np.ones(n), maxf=2)
+    assert np.isfinite(s).all(), "transform should still work after rejected forwardtaper mutation"
+
+
+def test_rejected_curvature_mutation_preserves_state() -> None:
+    """C1: a rejected curvature assignment must leave the previous valid value in place."""
+    st = HSTransform(curvature=100.0)
+    with pytest.raises(ValueError, match="curvature"):
+        st.curvature = 0.0
+    assert st.curvature == pytest.approx(100.0), (
+        "curvature should be unchanged after rejected assignment"
+    )
+
+
+# ---------------------------------------------------------------------------
+# C2 — Drifting grids must be rejected despite per-spacing tolerance
+# ---------------------------------------------------------------------------
+
+def test_drifting_grid_rejected() -> None:
+    """C2: a grid with per-spacing drift that accumulates beyond 0.5 sample must be rejected.
+
+    Uses the inspector's n=16384 example where endpoint drift reaches ~1.556 samples.
+    Each individual spacing deviates from the mean by at most ~9.5e-5 relative,
+    which is within the per-spacing tolerance, but the cumulative drift is material.
+    """
+    n = 16384
+    dt = 1.0 / n
+    spacings = dt * (1 + np.linspace(0, 0.00019, n - 1))
+    t = np.r_[0.0, np.cumsum(spacings)]
+    signal = np.ones(n)
+    with pytest.raises(ValueError, match="uniformly spaced"):
+        HSTransform().fit_transform(t, signal, maxf=2)
+
+
+def test_genuine_uniform_float64_still_accepted() -> None:
+    """C2: np.arange-based grid with no drift must still be accepted after the stricter check."""
+    n = 1024
+    t = np.arange(n) * (1.0 / n)
+    signal = np.ones(n)
+    HSTransform().fit_transform(t, signal, maxf=2)  # must not raise
