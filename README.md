@@ -212,7 +212,7 @@ pytest tests/ --cov=hstransform
 
 Four voltage disturbance types (Sag, Swell, Spike, Notch) on a 50 Hz, 220 V signal, compared between HST and Morlet Wavelet:
 
-![Voltage Disturbance](img/power_quality_disturbance.png)
+![Voltage Disturbance](notebooks/power_quality_disturbance.png)
 
 See also [Section 1.3 of the notebook](notebooks/hstransform_v2_test.ipynb) for the same comparison across three signal parameterisations (saved as `notebooks/pq_comparison_*.png` when the notebook is run): the standard 1 kHz / 2 s setup above, a 10 s record matching a common user example, and a 10 kHz / 0.2 s sub-cycle setup where HST's exact Hz axis is most useful.
 
@@ -222,7 +222,7 @@ HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly
 
 The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a given frequency traces a trajectory in the complex plane that is characteristic of the disturbance type:
 
-![Real-Imag Trajectory](img/power_quality_disturbance_trajectory.png)
+![Real-Imag Trajectory](notebooks/power_quality_disturbance_trajectory.png)
 
 Each HST disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag: inner orbit during reduced amplitude), larger circle (swell), extended lobe (spike: single-sample impulse deflects the orbit), and a pinched circle (notch: brief zero-crossing). The real Morlet rows are flat horizontal lines with `Im(CWT) = 0` identically: `pywt.cwt` with the `'morl'` wavelet returns real coefficients, so no trajectory is possible. Note: the complex Morlet wavelet (`'cmor'` in PyWavelets) does support complex coefficients and trajectories; the flat-line result here is specific to the real `'morl'` configuration used in these examples.
 
@@ -230,7 +230,7 @@ Each HST disturbance type produces a geometrically distinct shape at 50 Hz — n
 
 Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmonics and noise. Asymmetric HST (`λf=0.3`, `λb=0.02`) vs symmetric HST vs Morlet:
 
-![Fault Spectrogram](img/fault_current.png)
+![Fault Spectrogram](notebooks/fault_current.png)
 
 HST (rows 2 and 3) shows the fault onset as an abrupt step in high-frequency energy: pre-fault rows are dark, post-fault rows show structured harmonic bursts whose frequency pattern differs by fault type (SLG concentrates energy differently from 3-Phase). The Morlet (bottom row) also detects the fault clearly — it does not go dark — but the spectral patterns across the four fault types are harder to visually distinguish because the log-spaced scales mix frequency and time resolution in a way that blurs the harmonic structure. The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge relative to the symmetric window; for minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
 
@@ -238,7 +238,7 @@ HST (rows 2 and 3) shows the fault onset as an abrupt step in high-frequency ene
 
 Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
 
-![Fault Trajectory](img/fault_trajectory.png)
+![Fault Trajectory](notebooks/fault_trajectory.png)
 
 Each fault type traces a distinct shape in the complex plane at each frequency — clean circles in the healthy case, collapsed or interrupted orbits under single-line-to-ground fault, and starburst patterns under three-phase fault. The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The real `'morl'` wavelet provides no equivalent: its output has no imaginary part and produces no trajectory. (The complex Morlet wavelet `'cmor'` does support complex trajectories, but was not evaluated here.)
 
