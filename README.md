@@ -222,7 +222,9 @@ HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly
 
 The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a given frequency traces a trajectory in the complex plane that is characteristic of the disturbance type:
 
-![Real-Imag Trajectory](notebooks/power_quality_disturbance_trajectory.png)
+![Real-Imag Trajectory Animated](notebooks/pq_trajectory_animated.gif)
+
+*Static version: [power_quality_disturbance_trajectory.png](notebooks/power_quality_disturbance_trajectory.png)*
 
 Each HST disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag: inner orbit during reduced amplitude), larger circle (swell), extended lobe (spike: single-sample impulse deflects the orbit), and a pinched circle (notch: brief zero-crossing). The real Morlet rows are flat horizontal lines with `Im(CWT) = 0` identically: `pywt.cwt` with the `'morl'` wavelet returns real coefficients, so no trajectory is possible. Note: the complex Morlet wavelet (`'cmor'` in PyWavelets) does support complex coefficients and trajectories; the flat-line result here is specific to the real `'morl'` configuration used in these examples.
 
@@ -238,7 +240,9 @@ HST (rows 2 and 3) shows the fault onset as an abrupt step in high-frequency ene
 
 Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
 
-![Fault Trajectory](notebooks/fault_trajectory.png)
+![Fault Trajectory Animated](notebooks/fault_trajectory_animated.gif)
+
+*Static version: [fault_trajectory.png](notebooks/fault_trajectory.png)*
 
 Each fault type traces a distinct shape in the complex plane at each frequency — clean circles in the healthy case, collapsed or interrupted orbits under single-line-to-ground fault, and starburst patterns under three-phase fault. The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The real `'morl'` wavelet provides no equivalent: its output has no imaginary part and produces no trajectory. (The complex Morlet wavelet `'cmor'` does support complex trajectories, but was not evaluated here.)
 
