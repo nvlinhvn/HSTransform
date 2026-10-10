@@ -140,8 +140,10 @@ S = hs.fit_transform(t, V_sag)   # shape: (n_freq, n_time), complex
 
 # S[k, :] = time series of frequency bin k (= k Hz when n*dt = 1 s)
 # np.abs(S[50, :]) = localized complex spectral magnitude at 50 Hz
-#   Note: for a real cosine of amplitude A, the expected magnitude is A/2
-#   (not A), because the DFT splits energy between +k and -k bins.
+#   For a real cosine of amplitude A, the mean magnitude across time is A/2
+#   (not A) because the DFT splits energy between +k and -k bins.
+#   Individual sample magnitudes vary around A/2 due to negative-frequency
+#   image leakage; the A/2 approximation holds when image leakage is negligible.
 ```
 
 ### Parameters
@@ -180,7 +182,13 @@ For other durations, use `frequency_axis()` to get the correct Hz labels.
 
 ### Finite circular-window contract
 
-The implementation normalizes a single-period window cropped to `n` samples and treats the time axis as circular (via `fftfreq`). The continuous Gaussian window has infinite support; this discrete version loses tail energy for broad windows (small frequency bin or large taper values). This is expected behaviour, not a bug: the window integrates to 1 over the cropped period so DC is preserved, but magnitude values for broad windows are not directly comparable to the continuous formula. For narrow windows (high frequency bins or small tapers) the approximation is accurate.
+The implementation normalizes a single-period window cropped to `n` samples and treats the time axis as circular (via `fftfreq`). The continuous Gaussian window has infinite support; this discrete version loses tail energy for broad windows (small frequency bin or large taper values). This is expected behaviour, not a bug: the window integrates to 1 over the cropped period so DC is preserved, but magnitude values for broad windows are not directly comparable to the continuous formula.
+
+The finite approximation is accurate when two independent conditions hold simultaneously:
+1. **Negligible tails**: the window must fit within the cropped period — satisfied at high frequency bins or small tapers.
+2. **Adequate sampling**: the window must span enough samples to be well resolved — satisfied at low frequency bins or large tapers.
+
+These conditions pull in opposite directions. In particular, very high frequency bins can have _worse_ continuous-transform accuracy due to undersampling (a narrow window resolved by only a fraction of a sample). Use `frequency_axis()` together with the rule-of-thumb `window_SD_samples ≈ γ · N / k` (where `γ` is the taper value) to assess whether both conditions are met for a given configuration.
 
 ### Phase convention
 
@@ -214,7 +222,7 @@ The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a g
 
 ![Real-Imag Trajectory](img/power_quality_disturbance_trajectory.png)
 
-Each HST disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag: inner orbit during reduced amplitude), larger circle (swell), extended lobe (spike: single-sample impulse deflects the orbit), and a pinched circle (notch: brief zero-crossing). The Morlet rows are flat horizontal lines with `Im(CWT) = 0` identically: `pywt.cwt` with the `'morl'` wavelet returns real coefficients, so no trajectory is possible at all. This is the most direct demonstration of why Morlet cannot be used for trajectory-based classification.
+Each HST disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag: inner orbit during reduced amplitude), larger circle (swell), extended lobe (spike: single-sample impulse deflects the orbit), and a pinched circle (notch: brief zero-crossing). The real Morlet rows are flat horizontal lines with `Im(CWT) = 0` identically: `pywt.cwt` with the `'morl'` wavelet returns real coefficients, so no trajectory is possible. Note: the complex Morlet wavelet (`'cmor'` in PyWavelets) does support complex coefficients and trajectories; the flat-line result here is specific to the real `'morl'` configuration used in these examples.
 
 ### 6.3 Power system faults — spectrogram comparison
 
@@ -230,14 +238,14 @@ Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault t
 
 ![Fault Trajectory](img/fault_trajectory.png)
 
-Each fault type traces a distinct shape in the complex plane at each frequency — clean circles in the healthy case, collapsed or interrupted orbits under single-line-to-ground fault, and starburst patterns under three-phase fault. The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. Morlet provides no equivalent: its real-valued output has no imaginary part and produces no trajectory.
+Each fault type traces a distinct shape in the complex plane at each frequency — clean circles in the healthy case, collapsed or interrupted orbits under single-line-to-ground fault, and starburst patterns under three-phase fault. The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The real `'morl'` wavelet provides no equivalent: its output has no imaginary part and produces no trajectory. (The complex Morlet wavelet `'cmor'` does support complex trajectories, but was not evaluated here.)
 
 **When to use HST instead of Morlet:**
 
 | Scenario | Best choice | Reason |
 |---|---|---|
 | Fault inception / one-sided transients | Asymmetric HST (small `forwardtaper`) | Reduces pre-event bleed; smaller `forwardtaper` = less energy from the future |
-| Fault / disturbance type classification via trajectory | HST | `S[k,:]` is complex → 2D trajectory per frequency; `pywt.cwt('morl')` is real → trajectory is a flat line |
+| Fault / disturbance type classification via trajectory | HST | `S[k,:]` is complex → 2D trajectory per frequency; `pywt.cwt('morl')` (real Morlet) is real → trajectory is a flat line. Complex Morlet (`'cmor'`) does support trajectories. |
 | Uniform Hz labeling across all rows | HST | HST row k = k/(N·Δt) Hz exactly; Morlet pseudo-frequency is scale-convention-dependent |
 | Broadband impulsive events (spike, lightning) | Either | Both detect them; HST labels each row in exact Hz, Morlet uses approximate pseudo-frequency |
 | Stationary periodic signals only | Either | Morlet is simpler; HST adds no advantage |
