@@ -71,8 +71,16 @@ class HSTransform:
             raise ValueError("input_signal contains infinite values.")
 
         if time_values is not None:
+            # Reject complex timestamps before casting (np.asarray would silently
+            # discard the imaginary part, hiding a likely caller error).
+            _tv_raw = np.asarray(time_values)
+            if np.iscomplexobj(_tv_raw):
+                raise TypeError(
+                    "time_values must be a 1-D array of real numbers; "
+                    "got a complex-valued array."
+                )
             try:
-                time_arr = np.asarray(time_values, dtype=float)
+                time_arr = _tv_raw.astype(float)
             except (TypeError, ValueError) as exc:
                 raise TypeError(
                     "time_values must be a 1-D array of real numbers."
@@ -93,10 +101,14 @@ class HSTransform:
                 raise ValueError("time_values must be finite.")
 
             spacings = np.diff(time_arr)
-            dt = spacings[0]
-            if dt <= 0:
+            dt_ref = float(spacings[0])
+            if dt_ref <= 0:
                 raise ValueError("time_values must be strictly increasing.")
-            if not np.allclose(spacings, dt, rtol=1e-6, atol=0):
+            # Use a tolerance scaled to dt_ref so float32 grids and grids with
+            # large absolute origins (e.g. Unix timestamps) are accepted when
+            # spacing is genuinely uniform.  atol handles near-zero dt_ref.
+            atol = max(dt_ref * 1e-4, 1e-9 * (float(time_arr[-1]) - float(time_arr[0])))
+            if not np.allclose(spacings, dt_ref, rtol=1e-4, atol=atol):
                 raise ValueError("time_values must be uniformly spaced.")
 
     def _compute_hyperbolic_gaussian(

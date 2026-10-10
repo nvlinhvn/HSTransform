@@ -5,7 +5,7 @@
 [![PyPI Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
 [![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
-[![Tests](https://img.shields.io/badge/tests-62%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
+[![Tests](https://img.shields.io/badge/tests-98%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](https://mypy-lang.org/)
@@ -85,14 +85,15 @@ The code subtracted `x(0) = (λf−λb)√c / (2λfλb)` from the coordinate (ve
 
 ### 2.5 Test suite
 
-The original package had 2 tests. v0.2.2 ships with 90 tests covering:
+The original package had 2 tests. The current suite ships with 98 tests covering:
 
-- Input validation (wrong type, NaN, inf, non-1D, length mismatch, non-uniform time)
+- Input validation (wrong type, NaN, inf, non-1D, length mismatch, non-uniform time, complex timestamps, float32 and large-origin time grids)
 - Constructor validation (zero/negative/nan tapers and curvature)
 - Mathematical invariants: linearity, voice synthesis, window normalization (DC = 1), pure-tone constant ridge
 - Hyperbolic window properties: symmetric tapers → real window; asymmetric tapers → complex window; impulse asymmetric decay
 - Parametrized across taper values, curvature, signal frequencies, and sampling rates
 - Regression guards for all six fixed bugs, including time-unit invariance and minf > 0 bin selection
+- Independent direct-sum oracle tests that verify production `fit_transform` against reference weights built without calling any internal method
 - Robustness guards for all new parameter validation paths
 
 Coverage: 97%.
@@ -138,7 +139,9 @@ hs = HSTransform(
 S = hs.fit_transform(t, V_sag)   # shape: (n_freq, n_time), complex
 
 # S[k, :] = time series of frequency bin k (= k Hz when n*dt = 1 s)
-# np.abs(S[50, :]) = instantaneous amplitude envelope at 50 Hz
+# np.abs(S[50, :]) = localized complex spectral magnitude at 50 Hz
+#   Note: for a real cosine of amplitude A, the expected magnitude is A/2
+#   (not A), because the DFT splits energy between +k and -k bins.
 ```
 
 ### Parameters
@@ -174,6 +177,10 @@ freqs = hs.frequency_axis(n, dt, minf=0, fsamplingrate=1, maxf=None)
 Use `t = np.arange(n) / fs` (endpoint-exclusive) rather than `np.linspace(0, T, n)`.  
 When the record duration `n * dt = 1 s` exactly, row `k` maps to exactly `k` Hz.  
 For other durations, use `frequency_axis()` to get the correct Hz labels.
+
+### Finite circular-window contract
+
+The implementation normalizes a single-period window cropped to `n` samples and treats the time axis as circular (via `fftfreq`). The continuous Gaussian window has infinite support; this discrete version loses tail energy for broad windows (small frequency bin or large taper values). This is expected behaviour, not a bug: the window integrates to 1 over the cropped period so DC is preserved, but magnitude values for broad windows are not directly comparable to the continuous formula. For narrow windows (high frequency bins or small tapers) the approximation is accurate.
 
 ### Phase convention
 
@@ -230,9 +237,9 @@ Each fault type traces a distinct shape in the complex plane at each frequency �
 | Scenario | Best choice | Reason |
 |---|---|---|
 | Fault inception / one-sided transients | Asymmetric HST (small `forwardtaper`) | Reduces pre-event bleed; smaller `forwardtaper` = less energy from the future |
-| Fault or disturbance type classification | HST | Complex trajectory is a discriminative feature; Morlet is real-only |
-| Broadband impulsive events (spike, lightning) | HST | Captures all frequency bins simultaneously |
-| Frequency axis must be in Hz | HST | Morlet scale has no direct Hz mapping |
+| Fault or disturbance type classification | HST | Complex trajectory is a discriminative feature; `pywt.cwt` with `morl` returns real coefficients |
+| Broadband impulsive events (spike, lightning) | HST | Captures all frequency bins simultaneously at constant temporal resolution |
+| Frequency axis in calibrated Hz | HST | Morlet CWT scale maps to pseudo-frequency only approximately (depends on center frequency and scale convention) |
 | Stationary periodic signals only | Either | Morlet is simpler; HST adds no advantage |
 
 ---

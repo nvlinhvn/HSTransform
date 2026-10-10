@@ -728,6 +728,31 @@ def test_time_non_uniform_rejected() -> None:
         HSTransform().fit_transform(t, signal)
 
 
+def test_time_complex_rejected() -> None:
+    """R3: complex timestamps must be rejected before float cast silently drops imag."""
+    t = np.array([0.0, 0.1, 0.2, 0.3, 0.4]) + 1j * np.zeros(5)
+    signal = np.ones(5)
+    with pytest.raises(TypeError, match="complex"):
+        HSTransform().fit_transform(t, signal)
+
+
+def test_time_float32_accepted() -> None:
+    """R3: float32 uniform grids must be accepted (float32 spacing varies by ~1e-7 relative)."""
+    n = 64
+    t = np.linspace(0.0, 0.63, n, endpoint=False, dtype=np.float32)
+    signal = np.ones(n)
+    HSTransform().fit_transform(t, signal)  # must not raise
+
+
+def test_time_absolute_origin_accepted() -> None:
+    """R3: large absolute-time origins (e.g. Unix timestamps) must be accepted when spacing is uniform."""
+    n = 64
+    t0 = 1_700_000_000.0  # Unix timestamp ~ 2023
+    t = t0 + np.arange(n) * 0.1
+    signal = np.ones(n)
+    HSTransform().fit_transform(t, signal)  # must not raise
+
+
 def test_time_infinite_rejected() -> None:
     t = np.array([0.0, 0.1, float("inf"), 0.3, 0.4, 0.5])
     signal = np.ones(6)
