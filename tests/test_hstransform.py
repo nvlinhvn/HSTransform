@@ -745,7 +745,7 @@ def test_time_float32_accepted() -> None:
 
 
 def test_time_absolute_origin_accepted() -> None:
-    """R3: large absolute-time origins (e.g. Unix timestamps) must be accepted when spacing is uniform."""
+    """R3: large absolute-time origins (e.g. Unix timestamps) must be accepted when uniform."""
     n = 64
     t0 = 1_700_000_000.0  # Unix timestamp ~ 2023
     t = t0 + np.arange(n) * 0.1
@@ -817,6 +817,63 @@ def test_frequency_axis_values() -> None:
 # ---------------------------------------------------------------------------
 # R1 — Independent direct-sum oracle (catches coordinate regression)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# R4 — Numerical robustness at extreme scales
+# ---------------------------------------------------------------------------
+
+def test_extreme_scale_no_nan() -> None:
+    """R4: transform at very high frequency bin must not produce NaN or inf."""
+    n = 128
+    t = np.arange(n) * 0.001   # dt = 1 ms, Nyquist = 500 Hz
+    signal = np.random.default_rng(0).normal(size=n)
+    st = HSTransform(forwardtaper=0.01, backwardtaper=0.01, curvature=1e-6)
+    maxf = n // 2
+    s = st.fit_transform(t, signal, maxf=maxf)
+    assert np.isfinite(s).all(), "NaN or inf at extreme scale (R4 regression)."
+
+
+def test_extreme_curvature_no_nan() -> None:
+    """R4: very large curvature must not overflow √(v²+c)."""
+    n = 64
+    t = np.arange(n) * 1.0   # long record: c and v² are comparable at c=1e12
+    signal = np.ones(n)
+    st = HSTransform(forwardtaper=0.1, backwardtaper=0.2, curvature=1e12)
+    s = st.fit_transform(t, signal, maxf=5)
+    assert np.isfinite(s).all(), "NaN or inf with large curvature (R4 regression)."
+
+
+# ---------------------------------------------------------------------------
+# R5 — Mutable-state validation and frequency_axis guards
+# ---------------------------------------------------------------------------
+
+def test_post_construction_mutation_validated() -> None:
+    """R5: mutating forwardtaper after construction must re-validate."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="forwardtaper"):
+        st.forwardtaper = -1.0
+
+
+def test_post_construction_curvature_validated() -> None:
+    """R5: mutating curvature after construction must re-validate."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="curvature"):
+        st.curvature = 0.0
+
+
+def test_frequency_axis_invalid_dt() -> None:
+    """R5: frequency_axis must reject non-positive dt."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="dt"):
+        st.frequency_axis(n=64, dt=-0.001)
+
+
+def test_frequency_axis_invalid_n() -> None:
+    """R5: frequency_axis must reject n < 1."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="n"):
+        st.frequency_axis(n=0, dt=0.01)
+
 
 def test_direct_sum_oracle_asymmetric() -> None:
     """R1: oracle built without any HSTransform internal method catches coordinate regression.
