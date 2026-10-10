@@ -5,7 +5,7 @@
 [![PyPI Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
 [![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
-[![Tests](https://img.shields.io/badge/tests-98%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
+[![Tests](https://img.shields.io/badge/tests-116%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](https://mypy-lang.org/)
@@ -85,7 +85,7 @@ The code subtracted `x(0) = (λf−λb)√c / (2λfλb)` from the coordinate (ve
 
 ### 2.5 Test suite
 
-The original package had 2 tests. The current suite ships with 98 tests covering:
+The original package had 2 tests. The current suite ships with 116 tests covering:
 
 - Input validation (wrong type, NaN, inf, non-1D, length mismatch, non-uniform time, complex timestamps, float32 and large-origin time grids)
 - Constructor validation (zero/negative/nan tapers and curvature)
@@ -95,6 +95,7 @@ The original package had 2 tests. The current suite ships with 98 tests covering
 - Regression guards for all six fixed bugs, including time-unit invariance and minf > 0 bin selection
 - Independent direct-sum oracle tests that verify production `fit_transform` against reference weights built without calling any internal method
 - Robustness guards for all new parameter validation paths
+- Timestamp validation: epoch grids (Unix timestamp origin ~1.7×10⁹), float32 grids, sinusoidal timing jitter, linear drift
 
 Coverage: 97%.
 
@@ -210,15 +211,38 @@ pytest tests/ --cov=hstransform
 
 ### 6.1 Power quality disturbances — spectrogram comparison
 
-Four voltage disturbance types (Sag, Swell, Spike, Notch) on a 50 Hz, 220 V signal, compared between HST and Morlet Wavelet:
+Four voltage disturbance types on a 50 Hz, 220 V signal, compared between HST and Morlet Wavelet:
+
+| Type | Definition |
+|---|---|
+| **Sag** | 50% of nominal for 0.5 s |
+| **Swell** | 150% of nominal for 0.8 s |
+| **Spike** | 500% of nominal for 5 ms (sub-cycle, ≈ ¼ cycle at 50 Hz — IEEE 1159 impulse) |
+| **Notch** | 0 V for 80 ms |
 
 ![Voltage Disturbance](notebooks/power_quality_disturbance.png)
 
-See also [Section 1.3 of the notebook](notebooks/demo.ipynb) for the same comparison across three signal parameterisations (saved as `notebooks/pq_comparison_*.png` when the notebook is run): the standard 1 kHz / 2 s setup above, a 10 s record matching a common user example, and a 10 kHz / 0.2 s sub-cycle setup where HST's exact Hz axis is most useful.
+HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly to its exact Hz value. Sag and swell appear as amplitude changes at the 50 Hz fundamental. The spike, being a genuine sub-cycle transient, produces a broadband burst across all frequencies at the moment of inception — a broadband pattern that a multi-cycle "spike" (which is physically a short swell) would not produce. The Morlet CWT (bottom row) detects the same features but uses log-spaced scales and pseudo-frequency labels, so the y-axes are not directly comparable.
 
-HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly to its exact Hz value. Disturbances appear as amplitude changes at the fundamental and harmonics. The Morlet CWT (bottom row, 0–800 Hz pseudo-frequency) spans a much wider range via log-spaced scales, and also detects broadband features like spikes and notches. The two representations are not directly comparable: the y-axes cover different ranges, the Morlet frequency axis is pseudo-frequency (approximate Hz derived from scale and wavelet center frequency), and the color scales are not normalized to the same reference.
+### 6.2 Power quality disturbances — three signal parameterisations
 
-### 6.2 Power quality disturbances — real/imaginary trajectories
+The same four disturbance types shown across three sampling and duration setups:
+
+**Config A — standard (1 kHz / 2 s)**
+
+![PQ Config A](notebooks/pq_comparison_config_a_notebook.png)
+
+**Config B — long record (1 kHz / 10 s, user example)**
+
+![PQ Config B](notebooks/pq_comparison_config_b_user.png)
+
+**Config C — sub-cycle events (10 kHz / 0.2 s, 200 Hz carrier)**
+
+![PQ Config C](notebooks/pq_comparison_config_c_subcycle.png)
+
+Config C illustrates HST's exact Hz axis most clearly: at 10 kHz sampling, row k = k/(N·Δt) Hz resolves the 0.3 ms spike as a sharp broadband burst spanning the full frequency axis. The Morlet pseudo-frequency axis is log-spaced and cannot resolve the sub-cycle event with equal sharpness.
+
+### 6.3 Power quality disturbances — real/imaginary trajectories
 
 The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a given frequency traces a trajectory in the complex plane that is characteristic of the disturbance type:
 
@@ -226,17 +250,25 @@ The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a g
 
 *Static version: [power_quality_disturbance_trajectory.png](notebooks/power_quality_disturbance_trajectory.png)*
 
-Each HST disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag: inner orbit during reduced amplitude), larger circle (swell), extended lobe (spike: single-sample impulse deflects the orbit), and a pinched circle (notch: brief zero-crossing). The real Morlet rows are flat horizontal lines with `Im(CWT) = 0` identically: `pywt.cwt` with the `'morl'` wavelet returns real coefficients, so no trajectory is possible. Note: the complex Morlet wavelet (`'cmor'` in PyWavelets) does support complex coefficients and trajectories; the flat-line result here is specific to the real `'morl'` configuration used in these examples.
+Each disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag), larger circle (swell), brief deflection (spike: sub-cycle impulse kicks the orbit off-track momentarily), and a pinched orbit (notch: brief zero-crossing collapses the radius). The real `'morl'` Morlet wavelet returns real coefficients, so `Im(CWT) = 0` identically — no trajectory is possible. The complex Morlet (`'cmor'`) does support trajectories but was not evaluated here.
 
-### 6.3 Power system faults — spectrogram comparison
+### 6.4 Power system faults — spectrogram comparison
 
-Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmonics and noise. Asymmetric HST (`λf=0.3`, `λb=0.02`) vs symmetric HST vs Morlet:
+Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmonic noise. Asymmetric HST (`λf=0.3`, `λb=0.02`) vs symmetric HST vs Morlet:
 
 ![Fault Spectrogram](notebooks/fault_current.png)
 
-HST (rows 2 and 3) shows the fault onset as an abrupt step in high-frequency energy: pre-fault rows are dark, post-fault rows show structured harmonic bursts whose frequency pattern differs by fault type (SLG concentrates energy differently from 3-Phase). The Morlet (bottom row) also detects the fault clearly — it does not go dark — but the spectral patterns across the four fault types are harder to visually distinguish because the log-spaced scales mix frequency and time resolution in a way that blurs the harmonic structure. The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge relative to the symmetric window; for minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
+Each fault type injects a distinct HF transient at inception. The HF burst frequencies are chosen to be non-harmonic (not multiples of 50 Hz) so the inception burst is distinguishable from the 150 Hz and 250 Hz harmonic noise floor:
 
-### 6.4 Power system faults — real/imaginary trajectories
+| Fault type | HF burst | Detection signature |
+|---|---|---|
+| SLGF (Phase A) | 120 Hz on Ia only | Ia >> Ib ≈ Ic; zero-sequence current ≠ 0 |
+| DLGF (Phase A-B) | 175 Hz on Ia and Ib | Ia ≈ Ib > Ic; zero-sequence ≠ 0 |
+| 3-Phase | 220 Hz on all phases (120°-displaced) | Ia ≈ Ib ≈ Ic >> pre-fault; zero-sequence ≈ 0 |
+
+The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge relative to the symmetric window. For minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
+
+### 6.5 Power system faults — real/imaginary trajectories
 
 Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
 
@@ -244,7 +276,15 @@ Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault t
 
 *Static version: [fault_trajectory.png](notebooks/fault_trajectory.png)*
 
-Each fault type traces a distinct shape in the complex plane at each frequency — clean circles in the healthy case, collapsed or interrupted orbits under single-line-to-ground fault, and starburst patterns under three-phase fault. The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The real `'morl'` wavelet provides no equivalent: its output has no imaginary part and produces no trajectory. (The complex Morlet wavelet `'cmor'` does support complex trajectories, but was not evaluated here.)
+Each fault type traces a distinct shape in the complex plane at each frequency — clean circles (healthy), collapsed or interrupted orbits (SLGF), paired distortions (DLGF), and starburst patterns (3-Phase). The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification.
+
+### 6.6 Asymmetric window demo
+
+The hyperbolic Gaussian window decays at different rates before and after each time point. With `forwardtaper ≠ backwardtaper`, the magnitude envelope is visibly asymmetric around the impulse:
+
+![Asymmetric Window Demo](notebooks/asymmetric_window_demo.png)
+
+Left: unit impulse input. Centre: magnitude `|S(τ, k)|` at a fixed frequency row — the asymmetric window (orange) peaks off-centre relative to the symmetric one (teal). Right: log-scale decay profile separating the forward (future-looking) and backward (past-looking) tails. Larger `forwardtaper` = slower decay toward future samples = wider forward tail.
 
 **When to use HST instead of Morlet:**
 
@@ -271,7 +311,7 @@ Localization of the complex spectrum: the S transform.
 
 If you use HSTransform in your research, please cite:
 
-> Linh V Nguyen (2024). HSTransform (Version 0.2.1) [Computer software]. GitHub: github.com/nvlinhvn/HSTransform
+> Linh V Nguyen (2024). HSTransform (Version 0.2.4) [Computer software]. GitHub: github.com/nvlinhvn/HSTransform
 
 ---
 
