@@ -986,15 +986,17 @@ def test_rejected_curvature_mutation_preserves_state() -> None:
 # ---------------------------------------------------------------------------
 
 def test_drifting_grid_rejected() -> None:
-    """C2: a grid with per-spacing drift that accumulates beyond 0.5 sample must be rejected.
+    """C2: a monotonically drifting grid exceeding 0.5-sample drift against the
+    mean-spacing ideal must be rejected.
 
-    Uses the inspector's n=16384 example where endpoint drift reaches ~1.556 samples.
-    Each individual spacing deviates from the mean by at most ~9.5e-5 relative,
-    which is within the per-spacing tolerance, but the cumulative drift is material.
+    The validator uses mean spacing as the reference (matching the transform).
+    A linear ramp from 0 to 0.001*dt accumulates ~2.05 samples of parabolic drift
+    at its midpoint — well above the 0.5-sample threshold.  Individual per-spacing
+    deviations stay within rtol=1e-4, so the endpoint check is the active gate.
     """
     n = 16384
     dt = 1.0 / n
-    spacings = dt * (1 + np.linspace(0, 0.00019, n - 1))
+    spacings = dt * (1 + np.linspace(0, 0.001, n - 1))
     t = np.r_[0.0, np.cumsum(spacings)]
     signal = np.ones(n)
     with pytest.raises(ValueError, match="uniformly spaced"):
@@ -1007,6 +1009,18 @@ def test_genuine_uniform_float64_still_accepted() -> None:
     t = np.arange(n) * (1.0 / n)
     signal = np.ones(n)
     HSTransform().fit_transform(t, signal, maxf=2)  # must not raise
+
+
+def test_epoch_grid_accepted() -> None:
+    """P2: Unix-timestamp grid must be accepted.
+
+    float64 representational rounding on the first interval at large absolute origins
+    (e.g. 1.7e9) causes it to differ from the mean spacing.  Using the mean spacing as
+    the reference in the drift check (matching the transform) should accept this grid.
+    """
+    t_ep = 1.7e9 + np.arange(12000) * 0.002
+    signal = np.sin(2 * np.pi * 1.0 * np.arange(12000) * 0.002)
+    HSTransform().fit_transform(t_ep, signal, maxf=2)  # must not raise
 
 
 # ---------------------------------------------------------------------------

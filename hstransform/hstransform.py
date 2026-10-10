@@ -42,7 +42,11 @@ class HSTransform:
                 self, "curvature", HSTransform.curvature
             )
             self._validate_params(float(ft), float(bt), float(cv))  # type: ignore[arg-type]
-        super().__setattr__(name, value)
+            # Store the validated float, not the raw value, so subsequent arithmetic
+            # (window construction, etc.) cannot fail with a type error on str/Decimal inputs.
+            super().__setattr__(name, float(value))  # type: ignore[arg-type]
+        else:
+            super().__setattr__(name, value)
 
     @staticmethod
     def _validate_params(forwardtaper: float, backwardtaper: float, curvature: float) -> None:
@@ -126,28 +130,27 @@ class HSTransform:
                 raise ValueError("time_values must be finite.")
 
             spacings = np.diff(time_arr)
-            dt_ref = float(spacings[0])
-            if dt_ref <= 0:
+            if float(spacings[0]) <= 0:
                 raise ValueError("time_values must be strictly increasing.")
-            # Use the mean spacing as the reference for per-interval checks and for
-            # the dt estimate passed to the transform (avoids bias from a rounded
-            # first interval at large absolute origins).
+            # Use the mean spacing throughout: it is the same estimate the transform
+            # uses internally (_build_window_matrix) and avoids bias from a rounded
+            # first interval at large absolute origins (epoch timestamps, float32 grids).
             dt_mean = float(np.mean(spacings))
             # Per-spacing tolerance: allow float32/epoch representational rounding
             # (~1e-4 relative) but reject physically drifting grids.
             atol = max(dt_mean * 1e-4, 1e-9 * (float(time_arr[-1]) - float(time_arr[0])))
             if not np.allclose(spacings, dt_mean, rtol=1e-4, atol=atol):
                 raise ValueError("time_values must be uniformly spaced.")
-            # Additional check: accumulated endpoint drift against an ideal arithmetic
-            # progression with the first spacing.  A drifting grid whose individual
-            # per-spacing deviations are small can still shift the endpoint by many
-            # samples, causing material carrier-phase error in the DFT.
-            ideal = time_arr[0] + np.arange(len(time_arr)) * dt_ref
+            # Accumulated endpoint drift: compare every sample against the ideal
+            # arithmetic progression anchored at t[0] with mean spacing.  Using the
+            # mean (not the first interval) prevents false rejection of epoch grids
+            # where float64 rounding on the first interval differs from the mean.
+            ideal = time_arr[0] + np.arange(len(time_arr)) * dt_mean
             max_drift = float(np.max(np.abs(time_arr - ideal)))
-            if max_drift > 0.5 * dt_ref:
+            if max_drift > 0.5 * dt_mean:
                 raise ValueError(
                     "time_values must be uniformly spaced: accumulated drift "
-                    f"({max_drift:.3g}) exceeds half a sample ({0.5*dt_ref:.3g})."
+                    f"({max_drift:.3g}) exceeds half a sample ({0.5*dt_mean:.3g})."
                 )
 
     def _compute_hyperbolic_gaussian(
