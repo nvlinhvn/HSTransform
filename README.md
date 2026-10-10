@@ -206,7 +206,7 @@ Four voltage disturbance types (Sag, Swell, Spike, Notch) on a 50 Hz, 220 V sign
 
 ![Voltage Disturbance](img/power_quality_disturbance.png)
 
-HST evaluates all frequency rows simultaneously, so transient events like spikes and notches appear as clear vertical features across the full spectrum. Morlet concentrates energy around one scale (the dominant frequency), which limits its ability to characterize broadband or impulsive disturbances. The HST y-axis is in exact Hz; Morlet's is a wavelet scale with no direct Hz mapping.
+HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly to its exact Hz value. Disturbances appear as amplitude changes at the fundamental and harmonics. The Morlet CWT (bottom row, 0–800 Hz pseudo-frequency) spans a much wider range via log-spaced scales, and also detects broadband features like spikes and notches. The two representations are not directly comparable: the y-axes cover different ranges, the Morlet frequency axis is pseudo-frequency (approximate Hz derived from scale and wavelet center frequency), and the color scales are not normalized to the same reference.
 
 ### 6.2 Power quality disturbances — real/imaginary trajectories
 
@@ -214,7 +214,7 @@ The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a g
 
 ![Real-Imag Trajectory](img/power_quality_disturbance_trajectory.png)
 
-Each disturbance type produces a geometrically distinct shape — circles, ellipses, figure-8s, or patterns with abrupt discontinuities — depending on how the disturbance modifies the amplitude and phase at that frequency. Morlet output is real-valued and cannot produce this class of features.
+Each HST disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag: inner orbit during reduced amplitude), larger circle (swell), extended lobe (spike: single-sample impulse deflects the orbit), and a pinched circle (notch: brief zero-crossing). The Morlet rows are flat horizontal lines with `Im(CWT) = 0` identically: `pywt.cwt` with the `'morl'` wavelet returns real coefficients, so no trajectory is possible at all. This is the most direct demonstration of why Morlet cannot be used for trajectory-based classification.
 
 ### 6.3 Power system faults — spectrogram comparison
 
@@ -222,7 +222,7 @@ Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmon
 
 ![Fault Spectrogram](img/fault_current.png)
 
-HST captures the full frequency evolution through the fault — the collapse of the fundamental and the emergence of high-frequency transient content are both visible. Morlet tracks a single scale and goes dark when the dominant component disappears, leaving the post-fault transient undetected. The asymmetric window (`λf=0.3`, `λb=0.02`) demonstrates post-event decay asymmetry; for minimal pre-event smearing (energy bleed before the fault), use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
+HST (rows 2 and 3) shows the fault onset as an abrupt step in high-frequency energy: pre-fault rows are dark, post-fault rows show structured harmonic bursts whose frequency pattern differs by fault type (SLG concentrates energy differently from 3-Phase). The Morlet (bottom row) also detects the fault clearly — it does not go dark — but the spectral patterns across the four fault types are harder to visually distinguish because the log-spaced scales mix frequency and time resolution in a way that blurs the harmonic structure. The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge relative to the symmetric window; for minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
 
 ### 6.4 Power system faults — real/imaginary trajectories
 
@@ -230,16 +230,16 @@ Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault t
 
 ![Fault Trajectory](img/fault_trajectory.png)
 
-Each fault type traces a distinct shape in the complex plane at each frequency — from clean circles in the healthy case to interrupted or starburst patterns under fault conditions. The shapes differ across fault types and across frequency rows, making them usable as discriminative features for fault classification. Morlet provides no equivalent because its output is real-valued and carries no phase information.
+Each fault type traces a distinct shape in the complex plane at each frequency — clean circles in the healthy case, collapsed or interrupted orbits under single-line-to-ground fault, and starburst patterns under three-phase fault. The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. Morlet provides no equivalent: its real-valued output has no imaginary part and produces no trajectory.
 
 **When to use HST instead of Morlet:**
 
 | Scenario | Best choice | Reason |
 |---|---|---|
 | Fault inception / one-sided transients | Asymmetric HST (small `forwardtaper`) | Reduces pre-event bleed; smaller `forwardtaper` = less energy from the future |
-| Fault or disturbance type classification | HST | Complex trajectory is a discriminative feature; `pywt.cwt` with `morl` returns real coefficients |
-| Broadband impulsive events (spike, lightning) | HST | Captures all frequency bins simultaneously at constant temporal resolution |
-| Frequency axis in calibrated Hz | HST | Morlet CWT scale maps to pseudo-frequency only approximately (depends on center frequency and scale convention) |
+| Fault / disturbance type classification via trajectory | HST | `S[k,:]` is complex → 2D trajectory per frequency; `pywt.cwt('morl')` is real → trajectory is a flat line |
+| Uniform Hz labeling across all rows | HST | HST row k = k/(N·Δt) Hz exactly; Morlet pseudo-frequency is scale-convention-dependent |
+| Broadband impulsive events (spike, lightning) | Either | Both detect them; HST labels each row in exact Hz, Morlet uses approximate pseudo-frequency |
 | Stationary periodic signals only | Either | Morlet is simpler; HST adds no advantage |
 
 ---
