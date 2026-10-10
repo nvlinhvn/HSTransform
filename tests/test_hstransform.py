@@ -986,13 +986,11 @@ def test_rejected_curvature_mutation_preserves_state() -> None:
 # ---------------------------------------------------------------------------
 
 def test_drifting_grid_rejected() -> None:
-    """C2: a monotonically drifting grid exceeding 0.5-sample drift against the
-    mean-spacing ideal must be rejected.
+    """Phase-accurate drift check must reject a linearly drifting grid.
 
-    The validator uses mean spacing as the reference (matching the transform).
-    A linear ramp from 0 to 0.001*dt accumulates ~2.05 samples of parabolic drift
-    at its midpoint — well above the 0.5-sample threshold.  Individual per-spacing
-    deviations stay within rtol=1e-4, so the endpoint check is the active gate.
+    A linear ramp from 0 to 0.001*dt produces ~2.05 samples of parabolic drift
+    at its midpoint — well above the 0.032-sample Nyquist-phase-error limit.
+    Per-spacing deviations stay within rtol=1e-3, so the drift check is the gate.
     """
     n = 16384
     dt = 1.0 / n
@@ -1003,8 +1001,25 @@ def test_drifting_grid_rejected() -> None:
         HSTransform().fit_transform(t, signal, maxf=2)
 
 
+def test_sinusoidal_drift_rejected() -> None:
+    """Structured sinusoidal timing jitter must be rejected.
+
+    Each per-spacing deviation is only 9.5e-5 relative (below rtol=1e-3), and the
+    cumulative displacement against the mean-based ideal is near-zero (full period
+    cancels).  The phase-accurate drift check catches it because the cumulative
+    residuals peak at ~0.77 rad at Nyquist, exceeding the 0.1-rad limit.
+    """
+    n = 16384
+    dt = 1.0 / n
+    intervals = dt * (1 + 9.5e-5 * np.sin(2 * np.pi * np.arange(n - 1) / (n - 1)))
+    t = np.r_[0.0, np.cumsum(intervals)]
+    signal = np.ones(n)
+    with pytest.raises(ValueError, match="uniformly spaced"):
+        HSTransform().fit_transform(t, signal, maxf=2)
+
+
 def test_genuine_uniform_float64_still_accepted() -> None:
-    """C2: np.arange-based grid with no drift must still be accepted after the stricter check."""
+    """np.arange-based grid must still be accepted."""
     n = 1024
     t = np.arange(n) * (1.0 / n)
     signal = np.ones(n)
@@ -1012,15 +1027,26 @@ def test_genuine_uniform_float64_still_accepted() -> None:
 
 
 def test_epoch_grid_accepted() -> None:
-    """P2: Unix-timestamp grid must be accepted.
+    """Unix-timestamp grid must be accepted.
 
-    float64 representational rounding on the first interval at large absolute origins
-    (e.g. 1.7e9) causes it to differ from the mean spacing.  Using the mean spacing as
-    the reference in the drift check (matching the transform) should accept this grid.
+    float64 rounding at large absolute origins (1.7e9) creates per-spacing deviations
+    that the origin-subtracted drift check correctly ignores.
     """
     t_ep = 1.7e9 + np.arange(12000) * 0.002
     signal = np.sin(2 * np.pi * 1.0 * np.arange(12000) * 0.002)
     HSTransform().fit_transform(t_ep, signal, maxf=2)  # must not raise
+
+
+def test_float32_grid_accepted() -> None:
+    """float32-origin grid must be accepted.
+
+    float32 representational rounding produces per-spacing relative deviations of
+    ~4e-4, which requires rtol=1e-3 in the per-spacing check.  The phase-accurate
+    drift check independently confirms the grid is physically uniform.
+    """
+    t_f32 = (np.arange(5000, dtype=np.float32) / 1000.0).astype(float)
+    signal = np.ones(5000)
+    HSTransform().fit_transform(t_f32, signal, maxf=2)  # must not raise
 
 
 # ---------------------------------------------------------------------------

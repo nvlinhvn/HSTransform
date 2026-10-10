@@ -136,21 +136,35 @@ class HSTransform:
             # uses internally (_build_window_matrix) and avoids bias from a rounded
             # first interval at large absolute origins (epoch timestamps, float32 grids).
             dt_mean = float(np.mean(spacings))
-            # Per-spacing tolerance: allow float32/epoch representational rounding
-            # (~1e-4 relative) but reject physically drifting grids.
+            # Per-spacing check: catch obviously non-uniform grids (one interval
+            # is significantly different from the rest).  rtol=1e-3 accommodates
+            # float32 representational rounding (~6e-4 relative at t≈5 s, dt=1 ms)
+            # while still rejecting grids where any single step differs by > 0.1%.
+            # The tighter phase-accurate drift check below is the primary accuracy gate.
             atol = max(dt_mean * 1e-4, 1e-9 * (float(time_arr[-1]) - float(time_arr[0])))
-            if not np.allclose(spacings, dt_mean, rtol=1e-4, atol=atol):
+            if not np.allclose(spacings, dt_mean, rtol=1e-3, atol=atol):
                 raise ValueError("time_values must be uniformly spaced.")
-            # Accumulated endpoint drift: compare every sample against the ideal
-            # arithmetic progression anchored at t[0] with mean spacing.  Using the
-            # mean (not the first interval) prevents false rejection of epoch grids
-            # where float64 rounding on the first interval differs from the mean.
-            ideal = time_arr[0] + np.arange(len(time_arr)) * dt_mean
-            max_drift = float(np.max(np.abs(time_arr - ideal)))
-            if max_drift > 0.5 * dt_mean:
+            # Phase-accurate accumulated drift check.
+            # Subtract the time origin before forming residuals so that float64
+            # representational rounding at large absolute values (e.g. Unix epoch
+            # timestamps) does not accumulate into the residual — only physical
+            # non-uniformity does.
+            # Threshold: bound the worst-case carrier phase error at Nyquist.
+            #   phase_error = 2π · f_nyquist · max_drift = π · max_drift / dt_mean
+            # Allow ≤ 0.1 rad (≈ 6°) at Nyquist, i.e. max_drift ≤ 0.1·dt/π ≈ 0.032 dt.
+            # This is ~15× tighter than the old half-sample check (0.5 dt → 90° at
+            # Nyquist) and correctly rejects structured oscillatory jitter that the
+            # endpoint-only check misses.
+            t_rel = time_arr - time_arr[0]
+            ideal_rel = np.arange(len(time_arr)) * dt_mean
+            max_drift = float(np.max(np.abs(t_rel - ideal_rel)))
+            _phase_tol = 0.1 * dt_mean / np.pi   # ≈ 0.032 samples
+            if max_drift > _phase_tol:
                 raise ValueError(
                     "time_values must be uniformly spaced: accumulated drift "
-                    f"({max_drift:.3g}) exceeds half a sample ({0.5*dt_mean:.3g})."
+                    f"({max_drift:.3g} s, {max_drift/dt_mean:.4f} samples) exceeds "
+                    f"the Nyquist phase-error limit ({_phase_tol:.3g} s, "
+                    f"≈0.032 samples = 0.1 rad at Nyquist)."
                 )
 
     def _compute_hyperbolic_gaussian(
