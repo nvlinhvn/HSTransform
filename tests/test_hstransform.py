@@ -539,9 +539,6 @@ def test_frequency_unit_invariance() -> None:
     scaled with record duration and broke under unit change.
     """
     n = 128
-    rng = np.random.default_rng(42)
-    signal = rng.standard_normal(n)
-
     t_s = np.arange(n) / 100.0       # seconds, fs=100 Hz
     t_ms = t_s * 1000.0              # milliseconds
     c_s = 1.0
@@ -772,7 +769,6 @@ def test_frequency_axis_values() -> None:
     """frequency_axis rows match physical frequencies of fit_transform output."""
     n = 256
     fs = 256.0
-    t = np.arange(n) / fs
     dt = 1.0 / fs
     st = HSTransform()
 

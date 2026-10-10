@@ -241,7 +241,9 @@ class HSTransform:
 
         h: npt.NDArray[np.complexfloating[Any, Any]] = np.concatenate((fft(signal_arr),) * 2)
 
-        bins: npt.NDArray[np.intp] = np.arange(minf, effective_maxf + 1, fsamplingrate, dtype=np.intp)
+        bins: npt.NDArray[np.intp] = np.arange(
+            minf, effective_maxf + 1, fsamplingrate, dtype=np.intp
+        )
         n_rows = len(bins)
         s: npt.NDArray[np.complexfloating[Any, Any]] = np.zeros((n_rows, n), dtype="complex")
 
