@@ -21,11 +21,21 @@ class HSTransform:
     curvature: float = 312.5
 
     def __post_init__(self) -> None:
-        if not np.isfinite(self.forwardtaper) or self.forwardtaper <= 0:
+        self._validate_params(self.forwardtaper, self.backwardtaper, self.curvature)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Re-validate taper/curvature when a field is mutated after construction."""
+        super().__setattr__(name, value)
+        if name in ("forwardtaper", "backwardtaper", "curvature"):
+            self._validate_params(self.forwardtaper, self.backwardtaper, self.curvature)
+
+    @staticmethod
+    def _validate_params(forwardtaper: float, backwardtaper: float, curvature: float) -> None:
+        if not np.isfinite(forwardtaper) or forwardtaper <= 0:
             raise ValueError("forwardtaper must be a finite positive number.")
-        if not np.isfinite(self.backwardtaper) or self.backwardtaper <= 0:
+        if not np.isfinite(backwardtaper) or backwardtaper <= 0:
             raise ValueError("backwardtaper must be a finite positive number.")
-        if not np.isfinite(self.curvature) or self.curvature <= 0:
+        if not np.isfinite(curvature) or curvature <= 0:
             raise ValueError("curvature must be a finite positive number.")
 
     def _input_validation(
@@ -155,10 +165,12 @@ class HSTransform:
         t_w: npt.NDArray[np.floating[Any]] = np.fft.fftfreq(n) * n * dt
 
         # Horizontal translation: ζ = (a−b)√c / (2√ab) centres the hyperbola at lag 0.
-        zeta = (a - b) * np.sqrt(c) / (2.0 * np.sqrt(a * b))
+        sqrt_c = np.sqrt(c)
+        zeta = (a - b) * sqrt_c / (2.0 * np.sqrt(a * b))
         v = t_w - zeta
+        # Use np.hypot for √(v²+c): avoids potential overflow when |v|≫√c at extreme scales.
         x_1d: npt.NDArray[np.floating[Any]] = (
-            (a + b) * v + (a - b) * np.sqrt(v**2 + c)
+            (a + b) * v + (a - b) * np.hypot(v, sqrt_c)
         ) / (2.0 * a * b)
 
         K = len(freq_steps)
@@ -166,7 +178,10 @@ class HSTransform:
         for i, k in enumerate(freq_steps):
             # Physical frequency: f_k = k / (N·Δt)
             f_k = float(k) / (n * dt)
-            g = (f_k / np.sqrt(2.0 * np.pi)) * np.exp(-x_1d**2 * f_k**2 / 2.0)
+            # Clamp exponent to avoid underflow warnings at extreme scales; the
+            # Gaussian is effectively 0 well before this threshold.
+            exponent = np.clip(-0.5 * (f_k * x_1d) ** 2, -700.0, 0.0)
+            g = (f_k / np.sqrt(2.0 * np.pi)) * np.exp(exponent)
             g_integral = float(np.sum(g)) * dt
             if g_integral > 1e-15:
                 g = g / g_integral
@@ -196,6 +211,10 @@ class HSTransform:
             1D float array of length matching fit_transform output rows,
             where freqs[j] = physical frequency in Hz of row j.
         """
+        if not np.isfinite(dt) or dt <= 0:
+            raise ValueError(f"dt must be a finite positive number, got {dt}.")
+        if n < 1:
+            raise ValueError(f"n must be ≥ 1, got {n}.")
         effective_maxf = (min(900, n // 2)) if maxf is None else int(maxf)
         bins = np.arange(minf, effective_maxf + 1, fsamplingrate, dtype=np.intp)
         result: npt.NDArray[np.floating[Any]] = bins / (n * dt)
