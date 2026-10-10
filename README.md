@@ -214,7 +214,7 @@ Four voltage disturbance types (Sag, Swell, Spike, Notch) on a 50 Hz, 220 V sign
 
 ![Voltage Disturbance](notebooks/power_quality_disturbance.png)
 
-See also [Section 1.3 of the notebook](notebooks/hstransform_v2_test.ipynb) for the same comparison across three signal parameterisations (saved as `notebooks/pq_comparison_*.png` when the notebook is run): the standard 1 kHz / 2 s setup above, a 10 s record matching a common user example, and a 10 kHz / 0.2 s sub-cycle setup where HST's exact Hz axis is most useful.
+See also [Section 1.3 of the notebook](notebooks/demo.ipynb) for the same comparison across three signal parameterisations (saved as `notebooks/pq_comparison_*.png` when the notebook is run): the standard 1 kHz / 2 s setup above, a 10 s record matching a common user example, and a 10 kHz / 0.2 s sub-cycle setup where HST's exact Hz axis is most useful.
 
 HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly to its exact Hz value. Disturbances appear as amplitude changes at the fundamental and harmonics. The Morlet CWT (bottom row, 0–800 Hz pseudo-frequency) spans a much wider range via log-spaced scales, and also detects broadband features like spikes and notches. The two representations are not directly comparable: the y-axes cover different ranges, the Morlet frequency axis is pseudo-frequency (approximate Hz derived from scale and wavelet center frequency), and the color scales are not normalized to the same reference.
 
