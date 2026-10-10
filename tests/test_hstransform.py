@@ -329,11 +329,11 @@ def test_large_curvature_degrades_to_symmetric() -> None:
 
 
 def _half_energy_width(arr: np.ndarray) -> int:
-    """Return index where cumulative energy exceeds 50% of total."""
-    total = np.sum(arr**2)
+    """Return index where cumulative sum exceeds 50% of total (arr already an energy)."""
+    total = np.sum(arr)
     if total == 0:
         return len(arr)
-    cumsum = np.cumsum(arr**2)
+    cumsum = np.cumsum(arr)
     idx = np.searchsorted(cumsum, 0.5 * total)
     return int(idx) + 1
 
@@ -367,20 +367,28 @@ def test_asymmetric_decay_around_impulse() -> None:
 # ---------------------------------------------------------------------------
 
 def test_fft_slice_alignment() -> None:
-    """Row k DC == H[k]/n — directly catches the +1 offset bug."""
+    """Row k DC == H[k]/n — directly catches the +1 offset bug.
+
+    Impulse at index 7 gives H[k] = exp(-2πi·7k/N), which is k-dependent and
+    distinct for each k, unlike an impulse at 0 which gives H[k]=1 for all k
+    and would not catch a constant frequency offset in the slice.
+    """
     from scipy.fft import fft as sfft
     n = 128
     t = np.linspace(0, 1, n, endpoint=False)
     signal = np.zeros(n)
-    signal[0] = 1.0   # delta at t=0 → H[k] = 1 for all k
+    signal[7] = 1.0   # delta at t=7 → H[k] = exp(-2πi·7k/n), varies with k
     st = HSTransform()
     s = st.fit_transform(t, signal)
     H = sfft(signal)
     for k in [1, 5, 20]:
         row_dc = np.sum(s[k, :]) / n
-        expected_dc = H[k].real / n
-        msg = f"FFT slice misaligned at k={k}: got {row_dc.real:.4f}, expected {expected_dc:.4f}"
-        np.testing.assert_allclose(row_dc.real, expected_dc, rtol=0.05, err_msg=msg)
+        expected_dc = H[k] / n
+        msg = (
+            f"FFT slice misaligned at k={k}: got {row_dc:.4f}, expected {expected_dc:.4f}. "
+            "A +1 offset in the FFT slice would shift H[k] → H[k+1]."
+        )
+        np.testing.assert_allclose(row_dc, expected_dc, rtol=0.05, atol=1e-6, err_msg=msg)
 
 
 def test_parseval_approximate() -> None:
@@ -779,3 +787,76 @@ def test_frequency_axis_values() -> None:
     np.testing.assert_allclose(freqs[0], 0.0)
     np.testing.assert_allclose(freqs[1], 1.0 / (n * dt), rtol=1e-10)
     np.testing.assert_allclose(freqs[maxf], maxf / (n * dt), rtol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# R1 — Independent direct-sum oracle (catches coordinate regression)
+# ---------------------------------------------------------------------------
+
+def test_direct_sum_oracle_asymmetric() -> None:
+    """R1: oracle built without any HSTransform internal method catches coordinate regression.
+
+    Constructs reference weights from the horizontal-translation hyperbolic coordinate
+    (Pinnegar & Mansinha 2003) independently of _build_window_matrix, then compares
+    against production fit_transform.  This test WILL fail if the production code
+    reverts to the old vertical-subtraction coordinate (F2 regression), because
+    both formulas evaluate to 0 at lag 0 and thus pass all tests that only check
+    the coordinate value at a single point.
+    """
+    n, k = 31, 5
+    dt = 0.02
+    a, b, c = 0.3, 0.1, 0.01
+    t = np.arange(n) * dt
+    rng = np.random.default_rng(157)
+    x = rng.normal(size=n) + 1j * rng.normal(size=n)
+
+    # Reference: horizontal-translation coordinate — computed independently
+    u = np.fft.fftfreq(n) * n * dt
+    zeta = (a - b) * np.sqrt(c) / (2.0 * np.sqrt(a * b))
+    v = u - zeta
+    X = ((a + b) * v + (a - b) * np.sqrt(v**2 + c)) / (2.0 * a * b)
+    f_k = k / (n * dt)
+    weights = np.exp(-0.5 * (f_k * X)**2)
+    weights /= weights.sum()
+
+    # Direct circular convolution: S[k, τ] = Σ_m x[m] · w[(τ−m) mod n] · e^{−2πi k m/n}
+    m = np.arange(n)
+    demodulated = x * np.exp(-2j * np.pi * k * m / n)
+    expected = np.array([
+        np.sum(demodulated * weights[(j - m) % n]) for j in range(n)
+    ])
+
+    actual = HSTransform(a, b, c).fit_transform(t, x, minf=k, maxf=k)[0]
+    np.testing.assert_allclose(actual, expected, rtol=1e-11, atol=1e-12)
+
+
+@pytest.mark.parametrize("n,k,dt,a,b,c,seed", [
+    (31,  5, 0.02, 0.3, 0.1, 0.01,  157),   # asymmetric, non-unit dt
+    (64, 10, 0.01, 0.2, 0.2, 0.25,   42),   # symmetric (a == b)
+    (47,  3, 0.10, 0.5, 0.2,  1.0,   99),   # odd n, larger a/b ratio
+    (16,  2, 0.05, 0.4, 0.1,  0.5,    7),   # small n
+])
+def test_direct_sum_oracle_parametrized(
+    n: int, k: int, dt: float, a: float, b: float, c: float, seed: int,
+) -> None:
+    """Direct-sum oracle across multiple asymmetric and symmetric configurations."""
+    t = np.arange(n) * dt
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=n) + 1j * rng.normal(size=n)
+
+    u = np.fft.fftfreq(n) * n * dt
+    zeta = (a - b) * np.sqrt(c) / (2.0 * np.sqrt(a * b))
+    v = u - zeta
+    X = ((a + b) * v + (a - b) * np.sqrt(v**2 + c)) / (2.0 * a * b)
+    f_k = k / (n * dt)
+    weights = np.exp(-0.5 * (f_k * X)**2)
+    weights /= weights.sum()
+
+    m = np.arange(n)
+    demodulated = x * np.exp(-2j * np.pi * k * m / n)
+    expected = np.array([
+        np.sum(demodulated * weights[(j - m) % n]) for j in range(n)
+    ])
+
+    actual = HSTransform(a, b, c).fit_transform(t, x, minf=k, maxf=k)[0]
+    np.testing.assert_allclose(actual, expected, rtol=1e-11, atol=1e-12)

@@ -145,8 +145,8 @@ S = hs.fit_transform(t, V_sag)   # shape: (n_freq, n_time), complex
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `forwardtaper` | `0.2` | Controls window decay toward future samples (`t > τ`, negative lag). Larger = slower decay = wider tail toward the future. |
-| `backwardtaper` | `0.1` | Controls window decay toward past samples (`t < τ`, positive lag). Smaller = narrower tail into the past = sharper event-onset detection. |
+| `forwardtaper` | `0.2` | Controls window decay toward **future** samples (`t > τ`, negative lag). Smaller = narrower future-looking tail = less pre-event energy from an upcoming transient. For sharp onset detection with minimal pre-event bleed, **decrease `forwardtaper`**. |
+| `backwardtaper` | `0.1` | Controls window decay toward **past** samples (`t < τ`, positive lag). Smaller = narrower past-looking tail = faster post-event decay. |
 | `curvature` | `312.5` | Controls when the hyperbolic asymmetry activates. The asymmetric term in the coordinate transform is `(λf−λb)√(t²+curvature)`, which only differs meaningfully from a constant when `t² ≳ curvature`. **Rule of thumb: set `curvature ≲ (record duration)²`.** For `t = np.arange(n)` (sample-indexed), default 312.5 is appropriate. For `t ∈ [0,1]` (normalised), use `curvature ≈ 0.01–0.25`; otherwise the asymmetry is invisible. |
 
 When `forwardtaper == backwardtaper`, the window is a symmetric Gaussian.
@@ -215,7 +215,7 @@ Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmon
 
 ![Fault Spectrogram](img/fault_current.png)
 
-HST captures the full frequency evolution through the fault — the collapse of the fundamental and the emergence of high-frequency transient content are both visible. Morlet tracks a single scale and goes dark when the dominant component disappears, leaving the post-fault transient undetected. The asymmetric window sharpens the fault onset by reducing pre-event smearing relative to a symmetric window.
+HST captures the full frequency evolution through the fault — the collapse of the fundamental and the emergence of high-frequency transient content are both visible. Morlet tracks a single scale and goes dark when the dominant component disappears, leaving the post-fault transient undetected. The asymmetric window (`λf=0.3`, `λb=0.02`) demonstrates post-event decay asymmetry; for minimal pre-event smearing (energy bleed before the fault), use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
 
 ### 6.4 Power system faults — real/imaginary trajectories
 
@@ -229,7 +229,7 @@ Each fault type traces a distinct shape in the complex plane at each frequency �
 
 | Scenario | Best choice | Reason |
 |---|---|---|
-| Fault inception / one-sided transients | Asymmetric HST | Sharp onset detection; no pre-ringing |
+| Fault inception / one-sided transients | Asymmetric HST (small `forwardtaper`) | Reduces pre-event bleed; smaller `forwardtaper` = less energy from the future |
 | Fault or disturbance type classification | HST | Complex trajectory is a discriminative feature; Morlet is real-only |
 | Broadband impulsive events (spike, lightning) | HST | Captures all frequency bins simultaneously |
 | Frequency axis must be in Hz | HST | Morlet scale has no direct Hz mapping |
