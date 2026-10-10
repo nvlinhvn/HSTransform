@@ -151,18 +151,35 @@ S = hs.fit_transform(t, V_sag)   # shape: (n_freq, n_time), complex
 
 When `forwardtaper == backwardtaper`, the window is a symmetric Gaussian.
 
-### `fit_transform` signature
+### `fit_transform` and `frequency_axis` signatures
 
 ```python
 S = hs.fit_transform(
-    time_values,        # 1D array of time samples
-    input_signal,       # 1D array of signal values (same length)
-    minf=0,             # minimum frequency row index
-    fsamplingrate=1,    # frequency step (1 = all rows, 2 = every other row, …)
+    time_values,        # 1D uniformly-spaced time array, same length as signal
+    input_signal,       # 1D finite real or complex signal
+    minf=0,             # minimum frequency bin index (default 0 = include DC)
+    fsamplingrate=1,    # bin step (1 = every bin, 2 = every other, …)
+    maxf=None,          # maximum bin (default: min(900, n // 2))
 )
-# Returns: complex ndarray of shape ((maxf - minf) // fsamplingrate + 1, n)
-# maxf = min(900, n // 2)
+# Returns: complex ndarray of shape (len(bins), n)
+# where bins = np.arange(minf, effective_maxf+1, fsamplingrate)
+
+# Get physical Hz label for each row:
+freqs = hs.frequency_axis(n, dt, minf=0, fsamplingrate=1, maxf=None)
+# freqs[j] = bins[j] / (n * dt)  in Hz
 ```
+
+### Time-axis convention and frequency labeling
+
+Use `t = np.arange(n) / fs` (endpoint-exclusive) rather than `np.linspace(0, T, n)`.  
+When the record duration `n * dt = 1 s` exactly, row `k` maps to exactly `k` Hz.  
+For other durations, use `frequency_axis()` to get the correct Hz labels.
+
+### Phase convention
+
+The carrier phase is relative to `t[0] = 0` (sample zero), not the physical start time.  
+If your time axis starts at `t₀ ≠ 0` and you need phase relative to that physical origin,
+multiply each row `k` by `exp(-2πi · f_k · t₀)` after the transform.
 
 ---
 
