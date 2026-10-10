@@ -62,15 +62,27 @@ The shifted FFT spectrum was sliced as `h[k+1:k+n+1]` instead of `h[k:k+n]`. In 
 | No type annotations | Full `mypy --strict` type hints |
 | Python 3.10 | Python ≥ 3.12 |
 
-### 2.3 Test suite
+### 2.3 Algorithmic corrections in v0.2.1
 
-The original package had 2 tests. v0.2 ships with 62 tests covering:
+Two additional bugs were found and fixed in the core window construction:
+
+**Bug 5 — Frequency scaling used bin index instead of physical frequency**
+
+The Gaussian exponent used `k` (DFT bin index) where physical frequency `f_k = k / (N·Δt)` is required. The window width was incorrect whenever the record duration `N·Δt ≠ 1 s`, and the transform was not invariant to changes of time unit. The fix: replace `k_f = float(k)` with `f_k = float(k) / (n * dt)`.
+
+**Bug 6 — Hyperbola centred by vertical subtraction instead of horizontal translation**
+
+The code subtracted `x(0) = (λf−λb)√c / (2λfλb)` from the coordinate (vertical shift) instead of translating the hyperbola's argument by `ζ = (λf−λb)√c / (2√(λfλb))` (horizontal shift). Both produce `X(0) = 0`, but they are geometrically different curves with different slopes and asymptotic behaviour. This caused incorrect window shapes for all asymmetric (`λf ≠ λb`) configurations. The reference construction is from Pinnegar & Mansinha (2003).
+
+### 2.4 Test suite
+
+The original package had 2 tests. v0.2.1 ships with 66 tests covering:
 
 - Input validation (wrong type, NaN, string arrays)
 - Mathematical invariants: linearity, voice synthesis, window normalization (DC = 1), pure-tone constant ridge
 - Hyperbolic window properties: symmetric tapers → real window; asymmetric tapers → complex window; impulse asymmetric decay
 - Parametrized across taper values, curvature, signal frequencies, and sampling rates
-- Regression guards for all four fixed bugs
+- Regression guards for all six fixed bugs, including time-unit invariance and minf > 0 bin selection
 
 Coverage: 97%.
 
@@ -98,32 +110,35 @@ pip install -e ".[dev]"
 import numpy as np
 from hstransform import HSTransform
 
-# Create a signal (e.g. voltage with a 0.5 s sag)
-t = np.linspace(0, 10, 1000)
+# Create a signal: 1000 samples at 1 kHz (bin k == k Hz exactly)
+fs = 1000
+n  = 1000
+t  = np.arange(n) / fs          # endpoint-exclusive: dt = 0.001 s, n*dt = 1 s
+
 V = 220 * np.sqrt(2) * np.sin(2 * np.pi * 50 * t)
-V_sag = np.where((t >= 2) & (t <= 2.5), 0.5 * V, V)
+V_sag = np.where((t >= 0.2) & (t <= 0.25), 0.5 * V, V)
 
 # Run the transform
 hs = HSTransform(
-    forwardtaper=0.2,   # decay rate for t < τ (anti-causal)
-    backwardtaper=0.1,  # decay rate for t > τ (causal)
-    curvature=312.5,    # controls onset of hyperbolic asymmetry
+    forwardtaper=0.2,   # decay rate toward future samples (t > τ)
+    backwardtaper=0.1,  # decay rate toward past samples (t < τ)
+    curvature=0.25,     # controls onset of hyperbolic asymmetry; use ≲ (record duration)²
 )
 S = hs.fit_transform(t, V_sag)   # shape: (n_freq, n_time), complex
 
-# S[k, :] = time series of the k-th frequency component
-# np.abs(S[50, :]) = instantaneous amplitude at 50 Hz
+# S[k, :] = time series of frequency bin k (= k Hz when n*dt = 1 s)
+# np.abs(S[50, :]) = instantaneous amplitude envelope at 50 Hz
 ```
 
 ### Parameters
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `forwardtaper` | `0.2` | Window decay rate looking backward from τ (anti-causal side). Larger = slower decay = wider window. |
-| `backwardtaper` | `0.1` | Window decay rate looking forward from τ (causal side). |
-| `curvature` | `312.5` | Controls when the hyperbolic asymmetry activates. The asymmetric term in the coordinate transform is `(λf−λb)√(t²+curvature)`, which only differs meaningfully from a constant when `t² ≳ curvature`. **Rule of thumb: set `curvature ≲ (max signal duration)²`.** For sample-indexed time (`t = np.arange(n)`), the default 312.5 is appropriate. For normalised time (`t ∈ [0,1]`), use `curvature ≈ 0.01–0.25`; otherwise the asymmetry is invisible regardless of `forwardtaper` and `backwardtaper`. |
+| `forwardtaper` | `0.2` | Controls window decay toward future samples (`t > τ`, negative lag). Larger = slower decay = wider tail toward the future. |
+| `backwardtaper` | `0.1` | Controls window decay toward past samples (`t < τ`, positive lag). Smaller = narrower tail into the past = sharper event-onset detection. |
+| `curvature` | `312.5` | Controls when the hyperbolic asymmetry activates. The asymmetric term in the coordinate transform is `(λf−λb)√(t²+curvature)`, which only differs meaningfully from a constant when `t² ≳ curvature`. **Rule of thumb: set `curvature ≲ (record duration)²`.** For `t = np.arange(n)` (sample-indexed), default 312.5 is appropriate. For `t ∈ [0,1]` (normalised), use `curvature ≈ 0.01–0.25`; otherwise the asymmetry is invisible. |
 
-When `forwardtaper == backwardtaper`, the window is a standard symmetric Gaussian and the result is real-valued.
+When `forwardtaper == backwardtaper`, the window is a symmetric Gaussian.
 
 ### `fit_transform` signature
 
@@ -172,7 +187,7 @@ Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmon
 
 ![Fault Spectrogram](img/fault_current.png)
 
-HST captures the full frequency evolution through the fault — the collapse of the fundamental and the emergence of high-frequency transient content are both visible. Morlet tracks a single scale and goes dark when the dominant component disappears, leaving the post-fault transient undetected. The asymmetric window sharpens the fault onset with no pre-event energy smearing.
+HST captures the full frequency evolution through the fault — the collapse of the fundamental and the emergence of high-frequency transient content are both visible. Morlet tracks a single scale and goes dark when the dominant component disappears, leaving the post-fault transient undetected. The asymmetric window sharpens the fault onset by reducing pre-event smearing relative to a symmetric window.
 
 ### 6.4 Power system faults — real/imaginary trajectories
 

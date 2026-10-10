@@ -151,7 +151,6 @@ def test_fit_transform_perf_matches_serial() -> None:
 
     Guards against regressions introduced by the loop-precomputation optimisation.
     Serial reference: compute each row via _compute_hyperbolic_gaussian independently.
-    Updated to use h[k:k+n] (correct slice) and the DFT-based window.
     """
     n = 256
     t = np.linspace(0, 1, n, endpoint=False)
@@ -160,16 +159,16 @@ def test_fit_transform_perf_matches_serial() -> None:
 
     s_fast = st.fit_transform(t, signal)
 
-    # Serial reference — uses corrected FFT slice h[k:k+n]
     from scipy.fft import fft, ifft  # noqa: PLC0415
 
     signal_arr = np.asarray(signal)
     time_arr = np.asarray(t)
     maxf = min(900, n // 2)
     h = np.concatenate((fft(signal_arr),) * 2)
-    n_rows = (maxf - 0) // 1 + 1
+    bins = np.arange(0, maxf + 1, 1)
+    n_rows = len(bins)
     s_ref = np.zeros((n_rows, n), dtype="complex")
-    s_ref[0, :] = np.mean(signal_arr) * np.ones(n)
+    s_ref[0, :] = np.mean(signal_arr)
     for k in range(1, maxf + 1):
         w = st._compute_hyperbolic_gaussian(n, k, time_arr)
         s_ref[k, :] = ifft(h[k : k + n] * w)
@@ -524,6 +523,112 @@ def test_asymmetric_decay_parametrized(curvature: float) -> None:
         f"Decay ratio {observed_ratio:.2f} does not match λb/λf={expected_ratio:.2f} "
         f"at curvature={curvature}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Regression guards for F1 (frequency-unit invariance), F2 (correct coordinate),
+# and F3 (minf > 0 bin selection)
+# ---------------------------------------------------------------------------
+
+def test_frequency_unit_invariance() -> None:
+    """F1 fix: changing time units must not change coefficients.
+
+    If t is in seconds with curvature c, then t_ms = t * 1000 (milliseconds)
+    with curvature c * 1e6 must produce the same window kernels.
+    Before the fix, f_k = k (bin index) not k/(n·dt), so the window width
+    scaled with record duration and broke under unit change.
+    """
+    n = 128
+    rng = np.random.default_rng(42)
+    signal = rng.standard_normal(n)
+
+    t_s = np.arange(n) / 100.0       # seconds, fs=100 Hz
+    t_ms = t_s * 1000.0              # milliseconds
+    c_s = 1.0
+    c_ms = c_s * 1e6                 # curvature scales as time²
+
+    st_s  = HSTransform(forwardtaper=0.3, backwardtaper=0.1, curvature=c_s)
+    st_ms = HSTransform(forwardtaper=0.3, backwardtaper=0.1, curvature=c_ms)
+
+    k = 10
+    W_s  = st_s._compute_hyperbolic_gaussian(n, k, t_s)
+    W_ms = st_ms._compute_hyperbolic_gaussian(n, k, t_ms)
+
+    np.testing.assert_allclose(
+        W_s, W_ms, rtol=1e-8, atol=1e-10,
+        err_msg="Window changed under seconds→milliseconds conversion (F1 regression)."
+    )
+
+
+def test_coordinate_slope_at_zero_asymmetric() -> None:
+    """F2 fix: coordinate derivative at lag 0 must match the reference formula.
+
+    Reference: X'(0) = 2 / (a + b)
+    Old (vertical subtraction): X'(0) = (a + b) / (2ab)  [wrong for a ≠ b]
+
+    Verified by finite difference on the time-domain coordinate x_1d.
+    """
+    a, b, c = 0.3, 0.1, 0.01
+    n = 2048
+    dt = 1.0 / n       # 1-second record, n*dt = 1
+    t_w = np.fft.fftfreq(n) * n * dt
+
+    zeta = (a - b) * np.sqrt(c) / (2.0 * np.sqrt(a * b))
+    v = t_w - zeta
+    x_1d = ((a + b) * v + (a - b) * np.sqrt(v**2 + c)) / (2.0 * a * b)
+
+    # Finite-difference slope at lag 0 (t_w[0] = 0)
+    # t_w[1] is the first positive lag = dt
+    slope_fd = (x_1d[1] - x_1d[0]) / (t_w[1] - t_w[0])
+    slope_reference = 2.0 / (a + b)
+
+    np.testing.assert_allclose(
+        slope_fd, slope_reference, rtol=2e-3,
+        err_msg=(
+            f"Coordinate slope at lag 0 is {slope_fd:.6f}, "
+            f"expected reference 2/(a+b) = {slope_reference:.6f} (F2 regression)."
+        )
+    )
+
+
+def test_minf_positive_bin_selection() -> None:
+    """F3 fix: when minf > 0, the first row must correspond to bin minf.
+
+    Previously row 0 was always DC (mean) regardless of minf, so bin minf
+    was never computed and appeared as a constant-mean row instead.
+    """
+    n = 256
+    minf = 10
+    t = np.linspace(0, 1, n, endpoint=False)
+    # Unit complex tone at exactly bin 10: DFT has magnitude 1 at k=10 only
+    signal = np.exp(2j * np.pi * minf * np.arange(n) / n).real
+    st = HSTransform()
+
+    s = st.fit_transform(t, signal, minf=minf)
+
+    # Row 0 must NOT be the DC mean (mean of signal ≈ 0)
+    row0_mean = float(np.abs(np.mean(s[0, :])))
+    assert row0_mean > 0.1, (
+        f"Row 0 with minf={minf} has mean amplitude {row0_mean:.4f} ≈ 0; "
+        "it was set to DC instead of computing bin 10 (F3 regression)."
+    )
+
+
+def test_minf_positive_shape() -> None:
+    """F3 fix: output shape is correct for minf > 0."""
+    n = 256
+    t = np.linspace(0, 1, n, endpoint=False)
+    signal = np.sin(2 * np.pi * 10 * t)
+    st = HSTransform()
+    maxf = min(900, n // 2)
+
+    for minf, step in [(10, 1), (5, 5), (0, 1)]:
+        s = st.fit_transform(t, signal, minf=minf, fsamplingrate=step)
+        expected = len(np.arange(minf, maxf + 1, step))
+        assert s.shape == (expected, n), (
+            f"Shape mismatch for minf={minf}, step={step}: "
+            f"got {s.shape}, expected ({expected}, {n})"
+        )
 
 
 @pytest.mark.parametrize("a,b", [(1, 0), (0, 1), (2, -0.5), (-1, 3), (0.1, 0.1)])
