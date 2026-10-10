@@ -41,7 +41,7 @@ class HSTransform:
             cv = value if name == "curvature" else getattr(
                 self, "curvature", HSTransform.curvature
             )
-            self._validate_params(float(ft), float(bt), float(cv))  # raises before mutation
+            self._validate_params(float(ft), float(bt), float(cv))  # type: ignore[arg-type]
         super().__setattr__(name, value)
 
     @staticmethod
