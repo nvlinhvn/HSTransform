@@ -74,15 +74,26 @@ The Gaussian exponent used `k` (DFT bin index) where physical frequency `f_k = k
 
 The code subtracted `x(0) = (λf−λb)√c / (2λfλb)` from the coordinate (vertical shift) instead of translating the hyperbola's argument by `ζ = (λf−λb)√c / (2√(λfλb))` (horizontal shift). Both produce `X(0) = 0`, but they are geometrically different curves with different slopes and asymptotic behaviour. This caused incorrect window shapes for all asymmetric (`λf ≠ λb`) configurations. The reference construction is from Pinnegar & Mansinha (2003).
 
-### 2.4 Test suite
+### 2.4 Robustness improvements in v0.2.2
 
-The original package had 2 tests. v0.2.1 ships with 66 tests covering:
+- **Constructor validation**: `forwardtaper`, `backwardtaper`, and `curvature` must be finite and positive; invalid values raise `ValueError` immediately on construction.
+- **Signal validation**: signal must be 1-D, ≥ 2 samples, finite (no NaN or ±inf).
+- **Time array validation**: `time_values` must match signal length, be strictly ascending, and be uniformly spaced.
+- **Frequency parameter validation**: `minf`, `fsamplingrate`, and `maxf` are checked for valid integer types and ranges before any computation.
+- **Configurable `maxf`**: `fit_transform` now accepts a `maxf` keyword to limit the highest frequency bin returned.
+- **`frequency_axis` helper**: new method returns the physical frequency in Hz for each row of the transform output, matching the same `minf`/`fsamplingrate`/`maxf` arguments.
 
-- Input validation (wrong type, NaN, string arrays)
+### 2.5 Test suite
+
+The original package had 2 tests. v0.2.2 ships with 90 tests covering:
+
+- Input validation (wrong type, NaN, inf, non-1D, length mismatch, non-uniform time)
+- Constructor validation (zero/negative/nan tapers and curvature)
 - Mathematical invariants: linearity, voice synthesis, window normalization (DC = 1), pure-tone constant ridge
 - Hyperbolic window properties: symmetric tapers → real window; asymmetric tapers → complex window; impulse asymmetric decay
 - Parametrized across taper values, curvature, signal frequencies, and sampling rates
 - Regression guards for all six fixed bugs, including time-unit invariance and minf > 0 bin selection
+- Robustness guards for all new parameter validation paths
 
 Coverage: 97%.
 
