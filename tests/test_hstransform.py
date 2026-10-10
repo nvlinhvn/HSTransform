@@ -942,3 +942,52 @@ def test_direct_sum_oracle_parametrized(
 
     actual = HSTransform(a, b, c).fit_transform(t, x, minf=k, maxf=k)[0]
     np.testing.assert_allclose(actual, expected, rtol=1e-11, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# C3 — Representative dt used for frequency labeling
+# ---------------------------------------------------------------------------
+
+def test_epoch_grid_frequency_labels_use_mean_spacing() -> None:
+    """C3: frequency_axis should use mean spacing, not first spacing, for epoch grids.
+
+    For epoch grids (large absolute time origin), the first represented spacing may
+    differ from the mean by representational rounding.  Using mean spacing gives a
+    less biased frequency estimate.
+    """
+    n = 64
+    t0 = 1_700_000_000.0
+    dt_intended = 0.002
+    t = t0 + np.arange(n) * dt_intended
+    signal = np.ones(n)
+    st = HSTransform()
+    # Must not raise, and frequency_axis with the mean dt should be close to intended
+    st.fit_transform(t, signal, maxf=2)
+    # Mean spacing should be close to dt_intended
+    dt_mean = float(np.mean(np.diff(t)))
+    assert abs(dt_mean - dt_intended) / dt_intended < 1e-3
+
+
+# ---------------------------------------------------------------------------
+# C4 — frequency_axis validation matches fit_transform
+# ---------------------------------------------------------------------------
+
+def test_frequency_axis_rejects_negative_minf() -> None:
+    """C4: frequency_axis must reject negative minf (same as fit_transform)."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="minf"):
+        st.frequency_axis(n=64, dt=0.01, minf=-2)
+
+
+def test_frequency_axis_rejects_out_of_range_maxf() -> None:
+    """C4: frequency_axis must reject maxf > n//2 (same as fit_transform)."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="maxf"):
+        st.frequency_axis(n=64, dt=0.01, maxf=99999)
+
+
+def test_frequency_axis_rejects_invalid_fsamplingrate() -> None:
+    """C4: frequency_axis must reject non-positive fsamplingrate."""
+    st = HSTransform()
+    with pytest.raises(ValueError, match="fsamplingrate"):
+        st.frequency_axis(n=64, dt=0.01, fsamplingrate=0)

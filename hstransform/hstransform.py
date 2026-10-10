@@ -159,7 +159,10 @@ class HSTransform:
         b = self.backwardtaper   # controls positive-lag (t < τ) decay
         c = self.curvature
 
-        dt = float(time[1] - time[0]) if len(time) > 1 else 1.0
+        # Use the mean spacing as dt so that epoch grids (large absolute origin)
+        # and float32 grids (rounded first interval) get a representative estimate
+        # rather than a single potentially-biased first interval.
+        dt = float(np.mean(np.diff(time))) if len(time) > 1 else 1.0
 
         # Centered lag axis: t_w[0]=0, wraps to [-T/2, T/2)
         t_w: npt.NDArray[np.floating[Any]] = np.fft.fftfreq(n) * n * dt
@@ -215,7 +218,27 @@ class HSTransform:
             raise ValueError(f"dt must be a finite positive number, got {dt}.")
         if n < 1:
             raise ValueError(f"n must be ≥ 1, got {n}.")
-        effective_maxf = (min(900, n // 2)) if maxf is None else int(maxf)
+        # Validate minf, maxf, fsamplingrate with the same rules as fit_transform so
+        # frequency_axis cannot silently generate an axis for an invalid transform request.
+        if not isinstance(minf, (int, np.integer)) or isinstance(minf, bool):
+            raise TypeError("minf must be a non-negative integer.")
+        if minf < 0:
+            raise ValueError(f"minf must be ≥ 0, got {minf}.")
+        if not isinstance(fsamplingrate, (int, np.integer)) or isinstance(fsamplingrate, bool):
+            raise TypeError("fsamplingrate must be a positive integer.")
+        if fsamplingrate <= 0:
+            raise ValueError(f"fsamplingrate must be > 0, got {fsamplingrate}.")
+        default_maxf = min(900, n // 2)
+        if maxf is None:
+            effective_maxf = default_maxf
+        else:
+            if not isinstance(maxf, (int, np.integer)) or isinstance(maxf, bool):
+                raise TypeError("maxf must be an integer.")
+            if maxf < 0 or maxf > n // 2:
+                raise ValueError(f"maxf must be in [0, n//2={n//2}], got {maxf}.")
+            effective_maxf = int(maxf)
+        if minf > effective_maxf:
+            raise ValueError(f"minf ({minf}) must be ≤ maxf ({effective_maxf}).")
         bins = np.arange(minf, effective_maxf + 1, fsamplingrate, dtype=np.intp)
         result: npt.NDArray[np.floating[Any]] = bins / (n * dt)
         return result
