@@ -170,7 +170,9 @@ S = hs.fit_transform(
 # Returns: complex ndarray of shape (len(bins), n)
 # where bins = np.arange(minf, effective_maxf+1, fsamplingrate)
 
-# Get physical Hz label for each row:
+# Get physical Hz label for each row.
+# Use mean spacing — matches what the transform uses internally.
+dt = float(np.mean(np.diff(time_values)))
 freqs = hs.frequency_axis(n, dt, minf=0, fsamplingrate=1, maxf=None)
 # freqs[j] = bins[j] / (n * dt)  in Hz
 ```
