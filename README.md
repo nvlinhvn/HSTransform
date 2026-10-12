@@ -286,7 +286,7 @@ The hyperbolic Gaussian window decays at different rates before and after each t
 
 ![Asymmetric Window Demo](notebooks/asymmetric_window_demo.png)
 
-Left: unit impulse input. Centre: magnitude `|S(τ, k)|` at a fixed frequency row — the asymmetric window (orange) peaks off-centre relative to the symmetric one (teal). Right: log-scale decay profile separating the forward (future-looking) and backward (past-looking) tails. Larger `forwardtaper` = slower decay toward future samples = wider forward tail.
+Left: unit impulse input. Centre: magnitude `|S(τ, k)|` at a fixed frequency row — both windows peak at the impulse location (zero lag); the asymmetric window (orange) has unequal tails relative to the symmetric one (teal). Right: log-scale decay profile separating the backward (past-input, positive lag, after impulse) and forward (future-input, negative lag, before impulse) tails. Larger `forwardtaper` = slower decay toward future samples = wider forward tail.
 
 **When to use HST instead of Morlet:**
 
