@@ -250,8 +250,9 @@ class HSTransform:
         Pass the same minf, fsamplingrate, and maxf values used in fit_transform.
 
         Args:
-            n: signal length (same as len(input_signal)).
-            dt: sample spacing in seconds (time_values[1] - time_values[0]).
+            n: signal length (same as len(input_signal)); must be an integer ≥ 2.
+            dt: sample spacing in seconds — use float(np.mean(np.diff(time_values)))
+                to match the spacing the transform uses internally.
             minf: same value passed to fit_transform (default 0).
             fsamplingrate: same value passed to fit_transform (default 1).
             maxf: same value passed to fit_transform (default: min(900, n//2)).
@@ -262,8 +263,10 @@ class HSTransform:
         """
         if not np.isfinite(dt) or dt <= 0:
             raise ValueError(f"dt must be a finite positive number, got {dt}.")
-        if n < 1:
-            raise ValueError(f"n must be ≥ 1, got {n}.")
+        if not isinstance(n, (int, np.integer)) or isinstance(n, bool):
+            raise TypeError(f"n must be an integer ≥ 2, got {type(n).__name__}.")
+        if n < 2:
+            raise ValueError(f"n must be ≥ 2, got {n}.")
         # Validate minf, maxf, fsamplingrate with the same rules as fit_transform so
         # frequency_axis cannot silently generate an axis for an invalid transform request.
         if not isinstance(minf, (int, np.integer)) or isinstance(minf, bool):

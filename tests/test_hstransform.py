@@ -869,10 +869,31 @@ def test_frequency_axis_invalid_dt() -> None:
 
 
 def test_frequency_axis_invalid_n() -> None:
-    """R5: frequency_axis must reject n < 1."""
+    """R5: frequency_axis must reject n < 2."""
     st = HSTransform()
     with pytest.raises(ValueError, match="n"):
-        st.frequency_axis(n=0, dt=0.01)
+        st.frequency_axis(n=1, dt=0.01)
+
+
+def test_frequency_axis_n_float_rejected() -> None:
+    """R5: frequency_axis must reject float n (e.g. 2.5) — prevents NaN labels."""
+    st = HSTransform()
+    with pytest.raises(TypeError, match="integer"):
+        st.frequency_axis(n=2.5, dt=0.01)  # type: ignore[arg-type]
+
+
+def test_frequency_axis_n_nan_rejected() -> None:
+    """R5: frequency_axis must reject NaN n."""
+    st = HSTransform()
+    with pytest.raises(TypeError, match="integer"):
+        st.frequency_axis(n=float("nan"), dt=0.01)  # type: ignore[arg-type]
+
+
+def test_frequency_axis_n_bool_rejected() -> None:
+    """R5: frequency_axis must reject bool n (True/False are int subclass but semantically wrong)."""
+    st = HSTransform()
+    with pytest.raises(TypeError, match="integer"):
+        st.frequency_axis(n=True, dt=0.01)  # type: ignore[arg-type]
 
 
 def test_direct_sum_oracle_asymmetric() -> None:
