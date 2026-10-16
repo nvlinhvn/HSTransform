@@ -22,82 +22,15 @@ This package implements the algorithm from the author's [published paper](https:
 
 ---
 
-## 2. What changed in v0.2.0
+## 2. Correctness and version history
 
-### 2.1 Algorithmic corrections
+The original v0.1 implementation contained several bugs introduced when porting the algorithm from MATLAB. v0.2.x fixed all of them and added comprehensive validation and testing.
 
-Three bugs were found and fixed in the core algorithm, two of which were MATLAB→Python porting errors.
+**In plain terms:** the v0.1 window collapsed to a scalar (losing all time-frequency localisation), the DC row alternated instead of staying constant, the asymmetric window was computed as real-valued (so `forwardtaper ≠ backwardtaper` had no effect), frequency bins were off by one, frequency scaling was wrong for records longer or shorter than 1 s, and the hyperbola was centred incorrectly. All six defects are fixed in v0.2.x and covered by regression tests.
 
-**Bug 1 — Window was a scalar, not a vector (MATLAB port)**
+The algorithm has since been independently verified against the original MATLAB appendix from Pinnegar & Mansinha (2003), a direct-sum oracle, Fourier marginals, circular translation covariance, and real-signal reconstruction — with maximum absolute errors at machine-precision levels (< 2×10⁻¹³).
 
-The hyperbolic Gaussian window must be a 1D vector applied pointwise to the shifted FFT spectrum. The original code called `np.sum(g)` without an axis argument, which collapses the entire matrix to a scalar. In MATLAB, `sum(A)` on a 2D matrix sums along columns; in NumPy, `np.sum(A)` without `axis=` sums all elements. The fix: `np.sum(g, axis=0)`.
-
-With a scalar window, all frequency rows were effectively weighted by the same constant — the time-frequency localisation of the transform was completely broken.
-
-**Bug 2 — DC row alternating pattern (MATLAB port)**
-
-The DC row of the S-transform (frequency = 0) should be the signal mean repeated at every time step. The original code used `1 & np.arange(1, n+1)`, which in MATLAB is logical AND (all ones) but in Python/NumPy is bitwise AND, producing `[1, 0, 1, 0, ...]`. Every other DC-row sample was zeroed. The fix: `np.ones(n)`.
-
-**Bug 3 — Window was real-valued, losing asymmetry (algorithmic)**
-
-Even after fixing Bug 1, the frequency-domain window was computed as a real-valued sum over all time samples without a complex phase term. The correct frequency-domain window is the Discrete Fourier Transform of the time-domain hyperbolic Gaussian — and because the window is asymmetric in time (`forwardtaper ≠ backwardtaper`), its DFT is genuinely complex. Without the phase term, all causal/anti-causal information was averaged out, making the output identical to a symmetric window regardless of the taper values.
-
-The fix replaces the old sum with a proper DFT:
-```python
-g = (k / sqrt(2π)) * exp(-x(t)² * k² / 2)   # time-domain hyperbolic Gaussian
-G = fft(g) * dt                                # frequency-domain window (complex)
-```
-
-**Bug 4 — FFT slice off-by-one (MATLAB port)**
-
-The shifted FFT spectrum was sliced as `h[k+1:k+n+1]` instead of `h[k:k+n]`. In MATLAB, `h(k+1:k+n)` with 1-based indexing translates to Python's `h[k:k+n]`, not `h[k+1:k+n+1]`. The off-by-one shifted every frequency row by one bin.
-
-### 2.2 Modern packaging
-
-| Before (v0.1) | After (v0.2) |
-|---|---|
-| `setup.py` + `requirements.txt` | `pyproject.toml` (PEP 517, hatchling) |
-| `pandas` as hard runtime dependency | Removed — only `numpy` and `scipy` required |
-| `pytest` listed as runtime dependency | Moved to `[dev]` optional group |
-| No type annotations | Full `mypy --strict` type hints |
-| Python 3.10 | Python ≥ 3.12 |
-
-### 2.3 Algorithmic corrections in v0.2.1
-
-Two additional bugs were found and fixed in the core window construction:
-
-**Bug 5 — Frequency scaling used bin index instead of physical frequency**
-
-The Gaussian exponent used `k` (DFT bin index) where physical frequency `f_k = k / (N·Δt)` is required. The window width was incorrect whenever the record duration `N·Δt ≠ 1 s`, and the transform was not invariant to changes of time unit. The fix: replace `k_f = float(k)` with `f_k = float(k) / (n * dt)`.
-
-**Bug 6 — Hyperbola centred by vertical subtraction instead of horizontal translation**
-
-The code subtracted `x(0) = (λf−λb)√c / (2λfλb)` from the coordinate (vertical shift) instead of translating the hyperbola's argument by `ζ = (λf−λb)√c / (2√(λfλb))` (horizontal shift). Both produce `X(0) = 0`, but they are geometrically different curves with different slopes and asymptotic behaviour. This caused incorrect window shapes for all asymmetric (`λf ≠ λb`) configurations. The reference construction is from Pinnegar & Mansinha (2003).
-
-### 2.4 Robustness improvements in v0.2.2
-
-- **Constructor validation**: `forwardtaper`, `backwardtaper`, and `curvature` must be finite and positive; invalid values raise `ValueError` immediately on construction.
-- **Signal validation**: signal must be 1-D, ≥ 2 samples, finite (no NaN or ±inf).
-- **Time array validation**: `time_values` must match signal length, be strictly ascending, and be uniformly spaced.
-- **Frequency parameter validation**: `minf`, `fsamplingrate`, and `maxf` are checked for valid integer types and ranges before any computation.
-- **Configurable `maxf`**: `fit_transform` now accepts a `maxf` keyword to limit the highest frequency bin returned.
-- **`frequency_axis` helper**: new method returns the physical frequency in Hz for each row of the transform output, matching the same `minf`/`fsamplingrate`/`maxf` arguments.
-
-### 2.5 Test suite
-
-The original package had 2 tests. The current suite ships with 116 tests covering:
-
-- Input validation (wrong type, NaN, inf, non-1D, length mismatch, non-uniform time, complex timestamps, float32 and large-origin time grids)
-- Constructor validation (zero/negative/nan tapers and curvature)
-- Mathematical invariants: linearity, voice synthesis, window normalization (DC = 1), pure-tone constant ridge
-- Hyperbolic window properties: symmetric tapers → real window; asymmetric tapers → complex window; impulse asymmetric decay
-- Parametrized across taper values, curvature, signal frequencies, and sampling rates
-- Regression guards for all six fixed bugs, including time-unit invariance and minf > 0 bin selection
-- Independent direct-sum oracle tests that verify production `fit_transform` against reference weights built without calling any internal method
-- Robustness guards for all new parameter validation paths
-- Timestamp validation: epoch grids (Unix timestamp origin ~1.7×10⁹), float32 grids, sinusoidal timing jitter, linear drift
-
-Coverage: 97%.
+The current test suite has **119 tests** covering input validation, mathematical invariants, all six bug regressions, and timestamp edge cases. See [Appendix A](#appendix-a-algorithm-correction-history) for the full technical details of each fix.
 
 ---
 
@@ -293,3 +226,78 @@ If you use HSTransform in your research, please cite:
 ## 9. Contact
 
 Questions, issues, or suggestions: open a GitHub issue or email linhvietnguyen.ee@gmail.com
+
+---
+
+## Appendix A — Algorithm correction history
+
+### A.1 Algorithmic corrections (v0.2.0)
+
+**Bug 1 — Window was a scalar, not a vector (MATLAB port)**
+
+The hyperbolic Gaussian window must be a 1D vector applied pointwise to the shifted FFT spectrum. The original code called `np.sum(g)` without an axis argument, which collapses the entire matrix to a scalar. In MATLAB, `sum(A)` on a 2D matrix sums along columns; in NumPy, `np.sum(A)` without `axis=` sums all elements. The fix: `np.sum(g, axis=0)`.
+
+With a scalar window, all frequency rows were effectively weighted by the same constant — the time-frequency localisation of the transform was completely broken.
+
+**Bug 2 — DC row alternating pattern (MATLAB port)**
+
+The DC row of the S-transform (frequency = 0) should be the signal mean repeated at every time step. The original code used `1 & np.arange(1, n+1)`, which in MATLAB is logical AND (all ones) but in Python/NumPy is bitwise AND, producing `[1, 0, 1, 0, ...]`. Every other DC-row sample was zeroed. The fix: `np.ones(n)`.
+
+**Bug 3 — Window was real-valued, losing asymmetry (algorithmic)**
+
+Even after fixing Bug 1, the frequency-domain window was computed as a real-valued sum over all time samples without a complex phase term. The correct frequency-domain window is the Discrete Fourier Transform of the time-domain hyperbolic Gaussian — and because the window is asymmetric in time (`forwardtaper ≠ backwardtaper`), its DFT is genuinely complex. Without the phase term, all causal/anti-causal information was averaged out, making the output identical to a symmetric window regardless of the taper values.
+
+The fix replaces the old sum with a proper DFT:
+```python
+g = (k / sqrt(2π)) * exp(-x(t)² * k² / 2)   # time-domain hyperbolic Gaussian
+G = fft(g) * dt                                # frequency-domain window (complex)
+```
+
+**Bug 4 — FFT slice off-by-one (MATLAB port)**
+
+The shifted FFT spectrum was sliced as `h[k+1:k+n+1]` instead of `h[k:k+n]`. In MATLAB, `h(k+1:k+n)` with 1-based indexing translates to Python's `h[k:k+n]`, not `h[k+1:k+n+1]`. The off-by-one shifted every frequency row by one bin.
+
+### A.2 Modern packaging (v0.2.0)
+
+| Before (v0.1) | After (v0.2) |
+|---|---|
+| `setup.py` + `requirements.txt` | `pyproject.toml` (PEP 517, hatchling) |
+| `pandas` as hard runtime dependency | Removed — only `numpy` and `scipy` required |
+| `pytest` listed as runtime dependency | Moved to `[dev]` optional group |
+| No type annotations | Full `mypy --strict` type hints |
+| Python 3.10 | Python ≥ 3.12 |
+
+### A.3 Algorithmic corrections (v0.2.1)
+
+**Bug 5 — Frequency scaling used bin index instead of physical frequency**
+
+The Gaussian exponent used `k` (DFT bin index) where physical frequency `f_k = k / (N·Δt)` is required. The window width was incorrect whenever the record duration `N·Δt ≠ 1 s`, and the transform was not invariant to changes of time unit. The fix: replace `k_f = float(k)` with `f_k = float(k) / (n * dt)`.
+
+**Bug 6 — Hyperbola centred by vertical subtraction instead of horizontal translation**
+
+The code subtracted `x(0) = (λf−λb)√c / (2λfλb)` from the coordinate (vertical shift) instead of translating the hyperbola's argument by `ζ = (λf−λb)√c / (2√(λfλb))` (horizontal shift). Both produce `X(0) = 0`, but they are geometrically different curves with different slopes and asymptotic behaviour. This caused incorrect window shapes for all asymmetric (`λf ≠ λb`) configurations. The reference construction is from Pinnegar & Mansinha (2003).
+
+### A.4 Robustness improvements (v0.2.2)
+
+- **Constructor validation**: `forwardtaper`, `backwardtaper`, and `curvature` must be finite and positive; invalid values raise `ValueError` immediately on construction.
+- **Signal validation**: signal must be 1-D, ≥ 2 samples, finite (no NaN or ±inf).
+- **Time array validation**: `time_values` must match signal length, be strictly ascending, and be uniformly spaced.
+- **Frequency parameter validation**: `minf`, `fsamplingrate`, and `maxf` are checked for valid integer types and ranges before any computation.
+- **Configurable `maxf`**: `fit_transform` now accepts a `maxf` keyword to limit the highest frequency bin returned.
+- **`frequency_axis` helper**: new method returns the physical frequency in Hz for each row of the transform output, matching the same `minf`/`fsamplingrate`/`maxf` arguments.
+
+### A.5 Test suite
+
+The original package had 2 tests. The current suite ships with **119 tests** covering:
+
+- Input validation (wrong type, NaN, inf, non-1D, length mismatch, non-uniform time, complex timestamps, float32 and large-origin time grids)
+- Constructor validation (zero/negative/nan tapers and curvature)
+- Mathematical invariants: linearity, voice synthesis, window normalization (DC = 1), pure-tone constant ridge
+- Hyperbolic window properties: symmetric tapers → real window; asymmetric tapers → complex window; impulse asymmetric decay
+- Parametrized across taper values, curvature, signal frequencies, and sampling rates
+- Regression guards for all six fixed bugs, including time-unit invariance and minf > 0 bin selection
+- Independent direct-sum oracle tests that verify production `fit_transform` against reference weights built without calling any internal method
+- Robustness guards for all new parameter validation paths
+- Timestamp validation: epoch grids (Unix timestamp origin ~1.7×10⁹), float32 grids, sinusoidal timing jitter, linear drift
+
+Coverage: 97%.
