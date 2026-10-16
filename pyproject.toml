@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "HSTransform"
-version = "0.2.4"
+version = "1.0.0"
 description = "S-transform with Hyperbolic Gaussian Window"
 readme = "README.md"
 license = { text = "MIT" }
