@@ -890,7 +890,7 @@ def test_frequency_axis_n_nan_rejected() -> None:
 
 
 def test_frequency_axis_n_bool_rejected() -> None:
-    """R5: frequency_axis must reject bool n (True/False are int subclass but semantically wrong)."""
+    """R5: frequency_axis must reject bool n (True/False are int subclass but wrong here)."""
     st = HSTransform()
     with pytest.raises(TypeError, match="integer"):
         st.frequency_axis(n=True, dt=0.01)  # type: ignore[arg-type]
