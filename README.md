@@ -157,15 +157,15 @@ Four voltage disturbance types on a 50 Hz, 220 V signal, compared between HST an
 
 **Config A — standard (1 kHz / 2 s, 50 Hz carrier)**
 
-![PQ Config A](notebooks/pq_comparison_config_a_notebook.png)
+![PQ Config A](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/notebooks/pq_comparison_config_a_notebook.png)
 
 **Config B — long record (1 kHz / 10 s, 50 Hz carrier)**
 
-![PQ Config B](notebooks/pq_comparison_config_b_user.png)
+![PQ Config B](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/notebooks/pq_comparison_config_b_user.png)
 
 **Config C — sub-cycle events (10 kHz / 0.2 s, 200 Hz carrier)**
 
-![PQ Config C](notebooks/pq_comparison_config_c_subcycle.png)
+![PQ Config C](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/notebooks/pq_comparison_config_c_subcycle.png)
 
 Config C uses a 200 Hz carrier and 10 kHz sampling rate — different signal parameters from A/B, chosen to stress-test sub-cycle resolution. At 10 kHz, HST row k = k/(N·Δt) Hz places every bin at an exact, linearly-spaced Hz value. The 0.3 ms spike appears as a sharp broadband burst across the full frequency axis. The Morlet CWT uses log-spaced pseudo-frequency scales, so the y-axis is not directly comparable and the sub-cycle event is less sharply resolved.
 
@@ -173,7 +173,7 @@ Config C uses a 200 Hz carrier and 10 kHz sampling rate — different signal par
 
 The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a given frequency traces a trajectory in the complex plane that is characteristic of the disturbance type:
 
-![Real-Imag Trajectory Animated](notebooks/pq_trajectory_animated.gif)
+![Real-Imag Trajectory Animated](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/notebooks/pq_trajectory_animated.gif)
 
 
 Each disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag), larger circle (swell), brief deflection (spike: sub-cycle impulse kicks the orbit off-track momentarily), and a pinched orbit (notch: brief zero-crossing collapses the radius). The real `'morl'` Morlet wavelet returns real coefficients, so `Im(CWT) = 0` identically — no trajectory is possible. The complex Morlet (`'cmor'`) does support trajectories but was not evaluated here.
@@ -191,7 +191,7 @@ Four 3-phase fault scenarios with synthetic phase-current disturbances. Each fau
 
 Asymmetric HST (`λf=0.3`, `λb=0.02`) complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
 
-![Fault Trajectory Animated](notebooks/fault_trajectory_animated.gif)
+![Fault Trajectory Animated](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/notebooks/fault_trajectory_animated.gif)
 
 
 Each fault type traces a distinct shape in the complex plane at each frequency — clean circles (healthy), collapsed or interrupted orbits (SLGF), paired distortions (DLGF), and starburst patterns (3-Phase). The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge; for minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
@@ -200,7 +200,7 @@ Each fault type traces a distinct shape in the complex plane at each frequency �
 
 The hyperbolic Gaussian window decays at different rates before and after each time point. With `forwardtaper ≠ backwardtaper`, the magnitude envelope is visibly asymmetric around the impulse:
 
-![Asymmetric Window Demo](notebooks/asymmetric_window_demo.png)
+![Asymmetric Window Demo](https://raw.githubusercontent.com/nvlinhvn/HSTransform/main/notebooks/asymmetric_window_demo.png)
 
 Left: unit impulse input. Centre: magnitude `|S(τ, k)|` at a fixed frequency row — both windows peak at the impulse location (zero lag); the asymmetric window (orange) has unequal tails relative to the symmetric one (teal). Right: log-scale decay profile separating the backward (past-input, positive lag, after impulse) and forward (future-input, negative lag, before impulse) tails. Larger `forwardtaper` = slower decay toward future samples = wider forward tail.
 
