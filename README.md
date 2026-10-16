@@ -5,7 +5,7 @@
 [![PyPI Downloads/month](https://static.pepy.tech/badge/hstransform/month)](https://pepy.tech/project/hstransform)
 [![CI](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml/badge.svg)](https://github.com/nvlinhvn/HSTransform/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
-[![Tests](https://img.shields.io/badge/tests-116%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
+[![Tests](https://img.shields.io/badge/tests-119%20passed-brightgreen)](https://github.com/nvlinhvn/HSTransform/actions)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/HSTransform/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](https://mypy-lang.org/)
@@ -213,20 +213,28 @@ pytest tests/ --cov=hstransform
 
 ### 6.1 Power quality disturbances
 
-Four voltage disturbance types on a 50 Hz, 220 V signal:
+Four voltage disturbance types on a 50 Hz, 220 V signal, compared between HST and Morlet Wavelet across three sampling configurations:
 
-| Type | Definition |
+| Type | Definition (Config A/B, 50 Hz carrier) |
 |---|---|
 | **Sag** | 50% of nominal for 0.5 s |
 | **Swell** | 150% of nominal for 0.8 s |
 | **Spike** | 500% of nominal for 5 ms (sub-cycle, ≈ ¼ cycle at 50 Hz) |
 | **Notch** | 0 V for 80 ms |
 
-**Config: Sub-cycle events (10 kHz / 0.2 s, 200 Hz carrier)**
+**Config A — standard (1 kHz / 2 s, 50 Hz carrier)**
+
+![PQ Config A](notebooks/pq_comparison_config_a_notebook.png)
+
+**Config B — long record (1 kHz / 10 s, 50 Hz carrier)**
+
+![PQ Config B](notebooks/pq_comparison_config_b_user.png)
+
+**Config C — sub-cycle events (10 kHz / 0.2 s, 200 Hz carrier)**
 
 ![PQ Config C](notebooks/pq_comparison_config_c_subcycle.png)
 
-At 10 kHz sampling, the 0.3 ms spike appears as a sharp broadband burst spanning the full frequency axis — every row is labeled in exact Hz. Meanwhile, the Morlet CWT is less sharply resolved.
+Config C uses a 200 Hz carrier and 10 kHz sampling rate — different signal parameters from A/B, chosen to stress-test sub-cycle resolution. At 10 kHz, HST row k = k/(N·Δt) Hz places every bin at an exact, linearly-spaced Hz value. The 0.3 ms spike appears as a sharp broadband burst across the full frequency axis. The Morlet CWT uses log-spaced pseudo-frequency scales, so the y-axis is not directly comparable and the sub-cycle event is less sharply resolved.
 
 ### 6.2 Power quality disturbances — real/imaginary trajectories
 
