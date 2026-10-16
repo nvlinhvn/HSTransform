@@ -211,30 +211,24 @@ pytest tests/ --cov=hstransform
 
 ## 6. Examples
 
-### 6.1 Power quality disturbances — spectrogram comparison
+### 6.1 Power quality disturbances
 
-Four voltage disturbance types on a 50 Hz, 220 V signal, compared between HST and Morlet Wavelet:
+Four voltage disturbance types on a 50 Hz, 220 V signal:
 
 | Type | Definition |
 |---|---|
 | **Sag** | 50% of nominal for 0.5 s |
 | **Swell** | 150% of nominal for 0.8 s |
-| **Spike** | 500% of nominal for 5 ms (sub-cycle, ≈ ¼ cycle at 50 Hz — IEEE 1159 impulse) |
+| **Spike** | 500% of nominal for 5 ms (sub-cycle, ≈ ¼ cycle at 50 Hz) |
 | **Notch** | 0 V for 80 ms |
 
-![Voltage Disturbance](notebooks/power_quality_disturbance.png)
-
-HST (middle row, 0–200 Hz) maps every frequency bin independently and linearly to its exact Hz value. Sag and swell appear as amplitude changes at the 50 Hz fundamental. The spike, being a genuine sub-cycle transient, produces a broadband burst across all frequencies at the moment of inception — a broadband pattern that a multi-cycle "spike" (which is physically a short swell) would not produce. The Morlet CWT (bottom row) detects the same features but uses log-spaced scales and pseudo-frequency labels, so the y-axes are not directly comparable.
-
-### 6.2 Power quality disturbances — three signal parameterisations
-
-The same four disturbance types shown across three sampling and duration setups:
+Shown across three sampling and duration configurations (HST vs Morlet Wavelet):
 
 **Config A — standard (1 kHz / 2 s)**
 
 ![PQ Config A](notebooks/pq_comparison_config_a_notebook.png)
 
-**Config B — long record (1 kHz / 10 s, user example)**
+**Config B — long record (1 kHz / 10 s)**
 
 ![PQ Config B](notebooks/pq_comparison_config_b_user.png)
 
@@ -242,9 +236,9 @@ The same four disturbance types shown across three sampling and duration setups:
 
 ![PQ Config C](notebooks/pq_comparison_config_c_subcycle.png)
 
-Config C illustrates HST's exact Hz axis most clearly: at 10 kHz sampling, row k = k/(N·Δt) Hz resolves the 0.3 ms spike as a sharp broadband burst spanning the full frequency axis. The Morlet pseudo-frequency axis is log-spaced and cannot resolve the sub-cycle event with equal sharpness.
+Config C shows the advantage of HST's exact linear Hz axis most clearly. At 10 kHz sampling, the 0.3 ms spike appears as a sharp broadband burst spanning the full frequency axis — every row is labeled in exact Hz. The Morlet CWT uses log-spaced pseudo-frequency scales, so the y-axis is not directly comparable and the sub-cycle event is less sharply resolved.
 
-### 6.3 Power quality disturbances — real/imaginary trajectories
+### 6.2 Power quality disturbances — real/imaginary trajectories
 
 The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a given frequency traces a trajectory in the complex plane that is characteristic of the disturbance type:
 
@@ -254,49 +248,32 @@ The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a g
 
 Each disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag), larger circle (swell), brief deflection (spike: sub-cycle impulse kicks the orbit off-track momentarily), and a pinched orbit (notch: brief zero-crossing collapses the radius). The real `'morl'` Morlet wavelet returns real coefficients, so `Im(CWT) = 0` identically — no trajectory is possible. The complex Morlet (`'cmor'`) does support trajectories but was not evaluated here.
 
-### 6.4 Power system faults — spectrogram comparison
+### 6.3 Power system faults — real/imaginary trajectories
 
-Four 3-phase fault scenarios (Healthy, SLGF, DLGF, 3-Phase) with additive harmonic noise. Asymmetric HST (`λf=0.3`, `λb=0.02`) vs symmetric HST vs Morlet:
+Four 3-phase fault scenarios with synthetic phase-current disturbances. Each fault type injects a distinct HF transient at inception, with burst frequencies chosen to be non-harmonic (not multiples of 50 Hz):
 
-![Fault Spectrogram](notebooks/fault_current.png)
-
-Each fault type injects a distinct HF transient at inception. The HF burst frequencies are chosen to be non-harmonic (not multiples of 50 Hz) so the inception burst is distinguishable from the 150 Hz and 250 Hz harmonic noise floor:
-
-| Fault type | HF burst | Detection signature |
+| Fault type | HF burst | Signature |
 |---|---|---|
-| SLGF (Phase A) | 120 Hz on Ia only | Ia >> Ib ≈ Ic; zero-sequence current ≠ 0 |
-| DLGF (Phase A-B) | 175 Hz on Ia and Ib | Ia ≈ Ib > Ic; zero-sequence ≠ 0 |
-| 3-Phase | 220 Hz on all phases (120°-displaced) | Ia ≈ Ib ≈ Ic >> pre-fault; zero-sequence ≈ 0 |
+| **Healthy** | None | All three phases balanced; zero-sequence ≈ 0 |
+| **SLGF** (Phase A) | 120 Hz on Ia only | Ia >> Ib ≈ Ic; zero-sequence ≠ 0 |
+| **DLGF** (Phase A-B) | 175 Hz on Ia and Ib | Ia ≈ Ib > Ic; zero-sequence ≠ 0 |
+| **3-Phase** | 220 Hz on all phases (120°-displaced) | Ia ≈ Ib ≈ Ic >> pre-fault; zero-sequence ≈ 0 |
 
-The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge relative to the symmetric window. For minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
-
-### 6.5 Power system faults — real/imaginary trajectories
-
-Asymmetric HST complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
+Asymmetric HST (`λf=0.3`, `λb=0.02`) complex trajectories at 50, 100, 150, and 200 Hz for each fault type:
 
 ![Fault Trajectory Animated](notebooks/fault_trajectory_animated.gif)
 
 *Static version: [fault_trajectory.png](notebooks/fault_trajectory.png)*
 
-Each fault type traces a distinct shape in the complex plane at each frequency — clean circles (healthy), collapsed or interrupted orbits (SLGF), paired distortions (DLGF), and starburst patterns (3-Phase). The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification.
+Each fault type traces a distinct shape in the complex plane at each frequency — clean circles (healthy), collapsed or interrupted orbits (SLGF), paired distortions (DLGF), and starburst patterns (3-Phase). The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge; for minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
 
-### 6.6 Asymmetric window demo
+### 6.4 Asymmetric window demo
 
 The hyperbolic Gaussian window decays at different rates before and after each time point. With `forwardtaper ≠ backwardtaper`, the magnitude envelope is visibly asymmetric around the impulse:
 
 ![Asymmetric Window Demo](notebooks/asymmetric_window_demo.png)
 
 Left: unit impulse input. Centre: magnitude `|S(τ, k)|` at a fixed frequency row — both windows peak at the impulse location (zero lag); the asymmetric window (orange) has unequal tails relative to the symmetric one (teal). Right: log-scale decay profile separating the backward (past-input, positive lag, after impulse) and forward (future-input, negative lag, before impulse) tails. Larger `forwardtaper` = slower decay toward future samples = wider forward tail.
-
-**When to use HST instead of Morlet:**
-
-| Scenario | Best choice | Reason |
-|---|---|---|
-| Fault inception / one-sided transients | Asymmetric HST (small `forwardtaper`) | Reduces pre-event bleed; smaller `forwardtaper` = less energy from the future |
-| Fault / disturbance type classification via trajectory | HST | `S[k,:]` is complex → 2D trajectory per frequency; `pywt.cwt('morl')` (real Morlet) is real → trajectory is a flat line. Complex Morlet (`'cmor'`) does support trajectories. |
-| Uniform Hz labeling across all rows | HST | HST row k = k/(N·Δt) Hz exactly; Morlet pseudo-frequency is scale-convention-dependent |
-| Broadband impulsive events (spike, lightning) | Either | Both detect them; HST labels each row in exact Hz, Morlet uses approximate pseudo-frequency |
-| Stationary periodic signals only | Either | Morlet is simpler; HST adds no advantage |
 
 ---
 
