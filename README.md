@@ -222,21 +222,11 @@ Four voltage disturbance types on a 50 Hz, 220 V signal:
 | **Spike** | 500% of nominal for 5 ms (sub-cycle, ≈ ¼ cycle at 50 Hz) |
 | **Notch** | 0 V for 80 ms |
 
-Shown across three sampling and duration configurations (HST vs Morlet Wavelet):
-
-**Config A — standard (1 kHz / 2 s)**
-
-![PQ Config A](notebooks/pq_comparison_config_a_notebook.png)
-
-**Config B — long record (1 kHz / 10 s)**
-
-![PQ Config B](notebooks/pq_comparison_config_b_user.png)
-
-**Config C — sub-cycle events (10 kHz / 0.2 s, 200 Hz carrier)**
+**Config: Sub-cycle events (10 kHz / 0.2 s, 200 Hz carrier)**
 
 ![PQ Config C](notebooks/pq_comparison_config_c_subcycle.png)
 
-Config C shows the advantage of HST's exact linear Hz axis most clearly. At 10 kHz sampling, the 0.3 ms spike appears as a sharp broadband burst spanning the full frequency axis — every row is labeled in exact Hz. The Morlet CWT uses log-spaced pseudo-frequency scales, so the y-axis is not directly comparable and the sub-cycle event is less sharply resolved.
+At 10 kHz sampling, the 0.3 ms spike appears as a sharp broadband burst spanning the full frequency axis — every row is labeled in exact Hz. Meanwhile, the Morlet CWT is less sharply resolved.
 
 ### 6.2 Power quality disturbances — real/imaginary trajectories
 
@@ -244,7 +234,6 @@ The HST output is complex-valued. Plotting `Re(S[k, t])` vs `Im(S[k, t])` at a g
 
 ![Real-Imag Trajectory Animated](notebooks/pq_trajectory_animated.gif)
 
-*Static version: [power_quality_disturbance_trajectory.png](notebooks/power_quality_disturbance_trajectory.png)*
 
 Each disturbance type produces a geometrically distinct shape at 50 Hz — nested circles (sag), larger circle (swell), brief deflection (spike: sub-cycle impulse kicks the orbit off-track momentarily), and a pinched orbit (notch: brief zero-crossing collapses the radius). The real `'morl'` Morlet wavelet returns real coefficients, so `Im(CWT) = 0` identically — no trajectory is possible. The complex Morlet (`'cmor'`) does support trajectories but was not evaluated here.
 
@@ -263,7 +252,6 @@ Asymmetric HST (`λf=0.3`, `λb=0.02`) complex trajectories at 50, 100, 150, and
 
 ![Fault Trajectory Animated](notebooks/fault_trajectory_animated.gif)
 
-*Static version: [fault_trajectory.png](notebooks/fault_trajectory.png)*
 
 Each fault type traces a distinct shape in the complex plane at each frequency — clean circles (healthy), collapsed or interrupted orbits (SLGF), paired distortions (DLGF), and starburst patterns (3-Phase). The shapes differ across both fault types and frequency rows, making them usable as discriminative features for classification. The asymmetric window (`λf=0.3`, `λb=0.02`) sharpens the post-fault onset edge; for minimal pre-event smearing, use a smaller `forwardtaper` (e.g. `λf=0.02, λb=0.3`).
 
