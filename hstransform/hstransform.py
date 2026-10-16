@@ -1,133 +1,366 @@
 import dataclasses
-from typing import Union
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from scipy.fft import fft, ifft
-import pandas as pd
+
+_ArrayLike = npt.NDArray[Any] | Sequence[float]
 
 
 @dataclasses.dataclass
 class HSTransform:
-    """
-    A class used to represent the S-transform with a hyperbolic Gaussian window.
+    """S-transform with a hyperbolic Gaussian window.
 
-    ...
-
-    Attributes
-    ----------
-    forwardtaper : float
-        forward taper value
-    backwardtaper : float
-        backward taper value
-    curvature : float
-        curvature value
+    Combines properties of the Short-time Fourier Transform and Wavelet Transform.
     """
 
     forwardtaper: float = 0.2
     backwardtaper: float = 0.1
     curvature: float = 312.5
 
-    def _input_validation(self, input_signal):
+    def __post_init__(self) -> None:
+        self._validate_params(self.forwardtaper, self.backwardtaper, self.curvature)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Re-validate taper/curvature when a field is mutated after construction.
+
+        Validates the proposed value before storing it so a rejected assignment
+        leaves the instance in its previous valid state.
         """
-        Validates the input signal.
+        if name in ("forwardtaper", "backwardtaper", "curvature"):
+            # Read current values; fall back to class defaults during __init__ before
+            # the instance attribute exists.
+            ft = value if name == "forwardtaper" else getattr(
+                self, "forwardtaper", HSTransform.forwardtaper
+            )
+            bt = value if name == "backwardtaper" else getattr(
+                self, "backwardtaper", HSTransform.backwardtaper
+            )
+            cv = value if name == "curvature" else getattr(
+                self, "curvature", HSTransform.curvature
+            )
+            self._validate_params(float(ft), float(bt), float(cv))  # type: ignore[arg-type]
+            # Store the validated float, not the raw value, so subsequent arithmetic
+            # (window construction, etc.) cannot fail with a type error on str/Decimal inputs.
+            super().__setattr__(name, float(value))  # type: ignore[arg-type]
+        else:
+            super().__setattr__(name, value)
 
-        Parameters
-        ----------
-            input_signal : np.ndarray, pd.Series, or list
+    @staticmethod
+    def _validate_params(forwardtaper: float, backwardtaper: float, curvature: float) -> None:
+        if not np.isfinite(forwardtaper) or forwardtaper <= 0:
+            raise ValueError("forwardtaper must be a finite positive number.")
+        if not np.isfinite(backwardtaper) or backwardtaper <= 0:
+            raise ValueError("backwardtaper must be a finite positive number.")
+        if not np.isfinite(curvature) or curvature <= 0:
+            raise ValueError("curvature must be a finite positive number.")
 
-        Raises
-        ------
-            TypeError: If input_signal is not a numpy array, pandas Series, or list.
-            ValueError: If input_signal contains non-numerical values.
+    def _input_validation(
+        self,
+        input_signal: _ArrayLike,
+        time_values: _ArrayLike | None = None,
+    ) -> None:
+        """Validate signal and optional time array.
+
+        Raises:
+            TypeError: if input is not array-like or time is not real-valued.
+            ValueError: if input contains NaN/inf, shapes mismatch, time is
+                non-uniform/non-ascending, or signal is not 1-D.
         """
-        valid_types = (np.ndarray, pd.Series, list)
-        if not isinstance(input_signal, valid_types):
-            raise TypeError(f"input_signal must be one of the following types: {valid_types}, not {type(input_signal)}.")
+        try:
+            signal_arr = np.asarray(input_signal)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"input_signal must be array-like (ndarray, list, …), "
+                f"got {type(input_signal)}."
+            ) from exc
 
-        input_array = np.array(input_signal)
-        if np.isnan(input_array).any():
-            raise ValueError("input_signal contains null values.")
+        if not isinstance(input_signal, (np.ndarray, list, Sequence)):
+            raise TypeError(
+                f"input_signal must be array-like (ndarray, list, …), "
+                f"got {type(input_signal)}."
+            )
 
-        if not np.issubdtype(input_array.dtype, np.number):
+        if signal_arr.ndim != 1:
+            raise ValueError(
+                f"input_signal must be 1-D, got shape {signal_arr.shape}."
+            )
+
+        if len(signal_arr) < 2:
+            raise ValueError("input_signal must contain at least 2 samples.")
+
+        if not np.issubdtype(signal_arr.dtype, np.number):
             raise ValueError("input_signal should only contain numerical values.")
 
-    def _compute_hyperbolic_gaussian(self, l: int, n: int, time: np.ndarray) -> np.ndarray:
+        if not np.isfinite(signal_arr).all():
+            if np.isnan(signal_arr).any():
+                raise ValueError("input_signal contains null values.")
+            raise ValueError("input_signal contains infinite values.")
+
+        if time_values is not None:
+            # Reject complex timestamps before casting (np.asarray would silently
+            # discard the imaginary part, hiding a likely caller error).
+            _tv_raw = np.asarray(time_values)
+            if np.iscomplexobj(_tv_raw):
+                raise TypeError(
+                    "time_values must be a 1-D array of real numbers; "
+                    "got a complex-valued array."
+                )
+            try:
+                time_arr = _tv_raw.astype(float)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    "time_values must be a 1-D array of real numbers."
+                ) from exc
+
+            if time_arr.ndim != 1:
+                raise ValueError(
+                    f"time_values must be 1-D, got shape {time_arr.shape}."
+                )
+
+            if len(time_arr) != len(signal_arr):
+                raise ValueError(
+                    f"time_values length ({len(time_arr)}) must match "
+                    f"input_signal length ({len(signal_arr)})."
+                )
+
+            if not np.isfinite(time_arr).all():
+                raise ValueError("time_values must be finite.")
+
+            spacings = np.diff(time_arr)
+            if float(spacings[0]) <= 0:
+                raise ValueError("time_values must be strictly increasing.")
+            # Use the mean spacing throughout: it is the same estimate the transform
+            # uses internally (_build_window_matrix) and avoids bias from a rounded
+            # first interval at large absolute origins (epoch timestamps, float32 grids).
+            dt_mean = float(np.mean(spacings))
+            # Per-spacing check: catch obviously non-uniform grids (one interval
+            # is significantly different from the rest).  rtol=1e-3 accommodates
+            # float32 representational rounding (~6e-4 relative at t≈5 s, dt=1 ms)
+            # while still rejecting grids where any single step differs by > 0.1%.
+            # The tighter phase-accurate drift check below is the primary accuracy gate.
+            atol = max(dt_mean * 1e-4, 1e-9 * (float(time_arr[-1]) - float(time_arr[0])))
+            if not np.allclose(spacings, dt_mean, rtol=1e-3, atol=atol):
+                raise ValueError("time_values must be uniformly spaced.")
+            # Phase-accurate accumulated drift check.
+            # Subtract the time origin before forming residuals so that float64
+            # representational rounding at large absolute values (e.g. Unix epoch
+            # timestamps) does not accumulate into the residual — only physical
+            # non-uniformity does.
+            # Threshold: bound the worst-case carrier phase error at Nyquist.
+            #   phase_error = 2π · f_nyquist · max_drift = π · max_drift / dt_mean
+            # Allow ≤ 0.1 rad (≈ 6°) at Nyquist, i.e. max_drift ≤ 0.1·dt/π ≈ 0.032 dt.
+            # This is ~15× tighter than the old half-sample check (0.5 dt → 90° at
+            # Nyquist) and correctly rejects structured oscillatory jitter that the
+            # endpoint-only check misses.
+            t_rel = time_arr - time_arr[0]
+            ideal_rel = np.arange(len(time_arr)) * dt_mean
+            max_drift = float(np.max(np.abs(t_rel - ideal_rel)))
+            _phase_tol = 0.1 * dt_mean / np.pi   # ≈ 0.032 samples
+            if max_drift > _phase_tol:
+                raise ValueError(
+                    "time_values must be uniformly spaced: accumulated drift "
+                    f"({max_drift:.3g} s, {max_drift/dt_mean:.4f} samples) exceeds "
+                    f"the Nyquist phase-error limit ({_phase_tol:.3g} s, "
+                    f"≈0.032 samples = 0.1 rad at Nyquist)."
+                )
+
+    def _compute_hyperbolic_gaussian(
+        self, freq_len: int, n: int, time: npt.NDArray[np.floating[Any]]
+    ) -> npt.NDArray[np.complexfloating[Any, Any]]:
+        """Compute the hyperbolic Gaussian window for a single frequency index.
+
+        Args:
+            freq_len: signal length (determines DFT size and lag axis).
+            n: frequency index used to scale the Gaussian.
+            time: 1D array of time values (used for dt).
+
+        Returns:
+            1D complex array of length freq_len: frequency-domain window weights.
         """
-        Computes the hyperbolic Gaussian window.
+        freq_steps = np.array([n], dtype=np.intp)
+        W = self._build_window_matrix(freq_len, time, freq_steps)
+        result: npt.NDArray[np.complexfloating[Any, Any]] = W[0]
+        return result
 
-        Parameters
-        ----------
-            l : int
-                length of the signal
-            n : int
-                frequency point
-            time : np.ndarray
-                time values of the signal
+    def _build_window_matrix(
+        self,
+        n: int,
+        time: npt.NDArray[np.floating[Any]],
+        freq_steps: npt.NDArray[np.intp],
+    ) -> npt.NDArray[np.complexfloating[Any, Any]]:
+        """Compute the hyperbolic Gaussian window for all frequency steps at once.
 
-        Returns
-        -------
-            g : np.ndarray
-                hyperbolic Gaussian window
+        Args:
+            n: signal length (also the DFT size).
+            time: 1D array of time values, shape (n,).
+            freq_steps: 1D array of frequency indices, shape (K,).
+
+        Returns:
+            Complex window matrix of shape (K, n): row j is W for freq_steps[j].
         """
-        vectorf = np.arange(0, l)
-        vectorf1 = vectorf**2
-        lambdaf = self.forwardtaper
-        lambdab = self.backwardtaper
-        lambda_val = self.curvature
-        x = (lambdaf + lambdab) * time / (2 * lambdaf * lambdab) + (lambdaf - lambdab) * np.sqrt(time**2 + lambda_val) / (2 * lambdaf * lambdab)
-        x = np.tile(x, (1, 2)).T
-        vectorf2 = -vectorf1 * x**2 / (2 * n**2)
-        g = 2 * np.abs(vectorf) * np.exp(vectorf2) / ((lambdaf + lambdab) * np.sqrt(2 * np.pi))
-        return np.sum(g)
+        a = self.forwardtaper    # controls negative-lag (t > τ) decay
+        b = self.backwardtaper   # controls positive-lag (t < τ) decay
+        c = self.curvature
 
-    def fit_transform(self,
-                      time_values: Union[pd.Series, np.ndarray, list],
-                      input_signal: Union[pd.Series, np.ndarray, list],
-                      minf: int = 0,
-                      fsamplingrate: int = 1) -> np.ndarray:
+        # Use the mean spacing as dt so that epoch grids (large absolute origin)
+        # and float32 grids (rounded first interval) get a representative estimate
+        # rather than a single potentially-biased first interval.
+        dt = float(np.mean(np.diff(time))) if len(time) > 1 else 1.0
+
+        # Centered lag axis: t_w[0]=0, wraps to [-T/2, T/2)
+        t_w: npt.NDArray[np.floating[Any]] = np.fft.fftfreq(n) * n * dt
+
+        # Horizontal translation: ζ = (a−b)√c / (2√ab) centres the hyperbola at lag 0.
+        sqrt_c = np.sqrt(c)
+        zeta = (a - b) * sqrt_c / (2.0 * np.sqrt(a * b))
+        v = t_w - zeta
+        # Use np.hypot for √(v²+c): avoids potential overflow when |v|≫√c at extreme scales.
+        x_1d: npt.NDArray[np.floating[Any]] = (
+            (a + b) * v + (a - b) * np.hypot(v, sqrt_c)
+        ) / (2.0 * a * b)
+
+        K = len(freq_steps)
+        W: npt.NDArray[np.complexfloating[Any, Any]] = np.empty((K, n), dtype=complex)
+        for i, k in enumerate(freq_steps):
+            # Physical frequency: f_k = k / (N·Δt)
+            f_k = float(k) / (n * dt)
+            # Clamp exponent to avoid underflow warnings at extreme scales; the
+            # Gaussian is effectively 0 well before this threshold.
+            exponent = np.clip(-0.5 * (f_k * x_1d) ** 2, -700.0, 0.0)
+            g = (f_k / np.sqrt(2.0 * np.pi)) * np.exp(exponent)
+            g_integral = float(np.sum(g)) * dt
+            if g_integral > 1e-15:
+                g = g / g_integral
+            W[i] = fft(g) * dt
+        return W
+
+    def frequency_axis(
+        self,
+        n: int,
+        dt: float,
+        minf: int = 0,
+        fsamplingrate: int = 1,
+        maxf: int | None = None,
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Return the physical frequency in Hz for each row of fit_transform output.
+
+        Pass the same minf, fsamplingrate, and maxf values used in fit_transform.
+
+        Args:
+            n: signal length (same as len(input_signal)); must be an integer ≥ 2.
+            dt: sample spacing in seconds — use float(np.mean(np.diff(time_values)))
+                to match the spacing the transform uses internally.
+            minf: same value passed to fit_transform (default 0).
+            fsamplingrate: same value passed to fit_transform (default 1).
+            maxf: same value passed to fit_transform (default: min(900, n//2)).
+
+        Returns:
+            1D float array of length matching fit_transform output rows,
+            where freqs[j] = physical frequency in Hz of row j.
         """
-        Computes the S-transform of the input signal.
+        if not np.isfinite(dt) or dt <= 0:
+            raise ValueError(f"dt must be a finite positive number, got {dt}.")
+        if not isinstance(n, (int, np.integer)) or isinstance(n, bool):
+            raise TypeError(f"n must be an integer ≥ 2, got {type(n).__name__}.")
+        if n < 2:
+            raise ValueError(f"n must be ≥ 2, got {n}.")
+        # Validate minf, maxf, fsamplingrate with the same rules as fit_transform so
+        # frequency_axis cannot silently generate an axis for an invalid transform request.
+        if not isinstance(minf, (int, np.integer)) or isinstance(minf, bool):
+            raise TypeError("minf must be a non-negative integer.")
+        if minf < 0:
+            raise ValueError(f"minf must be ≥ 0, got {minf}.")
+        if not isinstance(fsamplingrate, (int, np.integer)) or isinstance(fsamplingrate, bool):
+            raise TypeError("fsamplingrate must be a positive integer.")
+        if fsamplingrate <= 0:
+            raise ValueError(f"fsamplingrate must be > 0, got {fsamplingrate}.")
+        default_maxf = min(900, n // 2)
+        if maxf is None:
+            effective_maxf = default_maxf
+        else:
+            if not isinstance(maxf, (int, np.integer)) or isinstance(maxf, bool):
+                raise TypeError("maxf must be an integer.")
+            if maxf < 0 or maxf > n // 2:
+                raise ValueError(f"maxf must be in [0, n//2={n//2}], got {maxf}.")
+            effective_maxf = int(maxf)
+        if minf > effective_maxf:
+            raise ValueError(f"minf ({minf}) must be ≤ maxf ({effective_maxf}).")
+        bins = np.arange(minf, effective_maxf + 1, fsamplingrate, dtype=np.intp)
+        result: npt.NDArray[np.floating[Any]] = bins / (n * dt)
+        return result
 
-        Parameters
-        ----------
-            time_values : np.ndarray
-                time values of the signal
-            input_signal : np.ndarray
-                input signal
-            minf : int
-                minimum frequency point
-            fsamplingrate : int
-                frequency sampling rate
+    def fit_transform(
+        self,
+        time_values: _ArrayLike,
+        input_signal: _ArrayLike,
+        minf: int = 0,
+        fsamplingrate: int = 1,
+        maxf: int | None = None,
+    ) -> npt.NDArray[np.complexfloating[Any, Any]]:
+        """Compute the S-transform of the input signal.
 
-        Returns
-        -------
-            S : np.ndarray
-                S-transform of the input signal
+        Args:
+            time_values: uniformly spaced time values, same length as input_signal.
+            input_signal: 1-D finite real or complex signal to transform.
+            minf: minimum frequency bin index (default 0 = include DC row).
+            fsamplingrate: frequency bin step (1 = every bin, 2 = every other, …).
+            maxf: maximum frequency bin index (default: min(900, n // 2)).
+                  Must satisfy 0 ≤ minf ≤ maxf ≤ n // 2.
+
+        Returns:
+            Complex ndarray of shape (len(bins), n) where
+            bins = np.arange(minf, effective_maxf+1, fsamplingrate).
         """
-        # Validate the input
-        self._input_validation(input_signal)
+        self._input_validation(input_signal, time_values)
 
-        # Convert to numpy arrays if they are not array types
-        if not isinstance(time_values, np.ndarray):
-            time_values = np.array(time_values)
-        if not isinstance(input_signal, np.ndarray):
-            input_signal = np.array(input_signal)
+        time_arr: npt.NDArray[np.floating[Any]] = np.asarray(time_values, dtype=float)
+        signal_arr: npt.NDArray[np.floating[Any]] = np.asarray(input_signal)
 
-        n = len(input_signal)
-        # Make sure the max frequency to be optimized (Cover the 6th, 12th, or 18th harmonic respectively)
-        maxf = min(900, n // 2)
+        n = len(signal_arr)
+        default_maxf = min(900, n // 2)
+        if maxf is None:
+            effective_maxf = default_maxf
+        else:
+            if not isinstance(maxf, (int, np.integer)) or isinstance(maxf, bool):
+                raise TypeError("maxf must be an integer.")
+            if maxf < 0 or maxf > n // 2:
+                raise ValueError(f"maxf must be in [0, n//2={n//2}], got {maxf}.")
+            effective_maxf = int(maxf)
 
-        # Compute the fft of input
-        h = fft(input_signal)
-        h = np.concatenate((h, h))
+        if not isinstance(minf, (int, np.integer)) or isinstance(minf, bool):
+            raise TypeError("minf must be a non-negative integer.")
+        if minf < 0:
+            raise ValueError(f"minf must be ≥ 0, got {minf}.")
+        if minf > effective_maxf:
+            raise ValueError(f"minf ({minf}) must be ≤ maxf ({effective_maxf}).")
 
-        # S output
-        s = np.zeros(((maxf - minf + 1) // fsamplingrate, n), dtype='complex')
-        s[0, :] = np.mean(input_signal) * (1 & np.arange(1, n + 1))
+        if not isinstance(fsamplingrate, (int, np.integer)) or isinstance(fsamplingrate, bool):
+            raise TypeError("fsamplingrate must be a positive integer.")
+        if fsamplingrate <= 0:
+            raise ValueError(f"fsamplingrate must be > 0, got {fsamplingrate}.")
 
-        # Increment the frequency point
-        for k in range(fsamplingrate, maxf - minf + 1, fsamplingrate):
-            w_hy = self._compute_hyperbolic_gaussian(n, minf + k, time_values)
-            s[k // fsamplingrate, :] = ifft(h[minf + k + 1:minf + k + n+1] * w_hy)
+        h: npt.NDArray[np.complexfloating[Any, Any]] = np.concatenate((fft(signal_arr),) * 2)
+
+        bins: npt.NDArray[np.intp] = np.arange(
+            minf, effective_maxf + 1, fsamplingrate, dtype=np.intp
+        )
+        n_rows = len(bins)
+        s: npt.NDArray[np.complexfloating[Any, Any]] = np.zeros((n_rows, n), dtype="complex")
+
+        dc_mask = bins == 0
+        if dc_mask.any():
+            s[dc_mask, :] = np.mean(signal_arr)
+
+        pos_mask = bins > 0
+        k_abs = bins[pos_mask]
+        if len(k_abs) > 0:
+            W = self._build_window_matrix(n, time_arr, k_abs)
+            H: npt.NDArray[np.complexfloating[Any, Any]] = np.stack(
+                [h[k : k + n] for k in k_abs]
+            )
+            s[pos_mask, :] = ifft(H * W, axis=1)
 
         return s
